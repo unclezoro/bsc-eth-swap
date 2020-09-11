@@ -18,12 +18,12 @@ type BscExecutor interface {
 type ChainExecutor struct {
 	Config *util.Config
 
-	CrossChainAbi abi.ABI
-	Client        *ethclient.Client
+	SwapProxyAbi abi.ABI
+	Client       *ethclient.Client
 }
 
 func NewExecutor(provider string, config *util.Config) *ChainExecutor {
-	crossChainAbi, err := abi.JSON(strings.NewReader(swapproxy.SwapProxyABI))
+	proxyAbi, err := abi.JSON(strings.NewReader(swapproxy.SwapProxyABI))
 	if err != nil {
 		panic("marshal abi error")
 	}
@@ -34,8 +34,8 @@ func NewExecutor(provider string, config *util.Config) *ChainExecutor {
 	}
 
 	return &ChainExecutor{
-		Config:        config,
-		CrossChainAbi: crossChainAbi,
-		Client:        client,
+		Config:       config,
+		SwapProxyAbi: proxyAbi,
+		Client:       client,
 	}
 }
