@@ -11,7 +11,7 @@ const (
 
 const (
 	ChainBSC = "bsc" // binance smart chain
-	ChainBBC = "bbc" // binance beacon chain
+	ChainETH = "eth" // ethereum
 
 	CoinBNB   = "BNB"
 	CoinOther = "OTHER"

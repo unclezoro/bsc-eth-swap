@@ -40,6 +40,7 @@ type TxEventLog struct {
 	FromAddress     string
 	ToAddress       string
 	Amount          string
+	FeeAmount       string
 
 	Status       TxStatus
 	TxHash       string
