@@ -3,14 +3,12 @@ package executor
 import (
 	"math/big"
 
-	common2 "github.com/binance-chain/bsc-eth-swap/common"
-
-	"github.com/binance-chain/bsc-eth-swap/model"
-
 	"github.com/ethereum/go-ethereum/accounts/abi"
+	"github.com/ethereum/go-ethereum/common"
 	"github.com/ethereum/go-ethereum/core/types"
 
-	"github.com/ethereum/go-ethereum/common"
+	common2 "github.com/binance-chain/bsc-eth-swap/common"
+	"github.com/binance-chain/bsc-eth-swap/model"
 )
 
 var (

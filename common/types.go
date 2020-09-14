@@ -12,12 +12,6 @@ const (
 const (
 	ChainBSC = "bsc" // binance smart chain
 	ChainETH = "eth" // ethereum
-
-	CoinBNB   = "BNB"
-	CoinOther = "OTHER"
-
-	ChannelIdTransferIn  = 3
-	ChannelIdTransferOut = 2
 )
 
 const (
