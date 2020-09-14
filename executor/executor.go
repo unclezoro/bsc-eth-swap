@@ -17,7 +17,7 @@ import (
 	"github.com/binance-chain/bsc-eth-swap/util"
 )
 
-type BscExecutor interface {
+type Executor interface {
 	GetBlockAndTxEvents(height int64) (*common.BlockAndEventLogs, error)
 }
 
@@ -30,7 +30,7 @@ type ChainExecutor struct {
 	Client        *ethclient.Client
 }
 
-func NewExecutor(chain string, provider string, config *util.Config) *ChainExecutor {
+func NewExecutor(chain string, provider string, swapAddr ethcmm.Address, config *util.Config) *ChainExecutor {
 	proxyAbi, err := abi.JSON(strings.NewReader(swapproxy.SwapProxyABI))
 	if err != nil {
 		panic("marshal abi error")
@@ -42,14 +42,15 @@ func NewExecutor(chain string, provider string, config *util.Config) *ChainExecu
 	}
 
 	return &ChainExecutor{
-		Chain:        chain,
-		Config:       config,
-		SwapProxyAbi: proxyAbi,
-		Client:       client,
+		Chain:         chain,
+		Config:        config,
+		SwapProxyAddr: swapAddr,
+		SwapProxyAbi:  proxyAbi,
+		Client:        client,
 	}
 }
 
-func (e *ChainExecutor) GetBlockAndPackages(height int64) (*common.BlockAndEventLogs, error) {
+func (e *ChainExecutor) GetBlockAndTxEvents(height int64) (*common.BlockAndEventLogs, error) {
 	ctxWithTimeout, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
 

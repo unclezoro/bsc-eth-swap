@@ -13,23 +13,31 @@ import (
 )
 
 type Observer struct {
-	DB          *gorm.DB
-	Config      *util.Config
-	BscExecutor executor.BscExecutor
+	DB *gorm.DB
+
+	StartHeight int64
+	ConfirmNum  int64
+
+	Config   *util.Config
+	Executor executor.Executor
 }
 
 // NewObserver returns the observer instance
-func NewObserver(db *gorm.DB, cfg *util.Config, bscExecutor executor.BscExecutor) *Observer {
+func NewObserver(db *gorm.DB, startHeight, confirmNum int64, cfg *util.Config, executor executor.Executor) *Observer {
 	return &Observer{
-		DB:          db,
-		Config:      cfg,
-		BscExecutor: bscExecutor,
+		DB: db,
+
+		StartHeight: startHeight,
+		ConfirmNum:  confirmNum,
+
+		Config:   cfg,
+		Executor: executor,
 	}
 }
 
 // Start starts the routines of observer
 func (ob *Observer) Start() {
-	go ob.Fetch(ob.Config.ChainConfig.BSCStartHeight)
+	go ob.Fetch(ob.StartHeight)
 	go ob.Prune()
 	go ob.Alert()
 }
@@ -61,23 +69,23 @@ func (ob *Observer) Fetch(startHeight int64) {
 // fetchBlock fetches the next block of BSC and saves it to database. if the next block hash
 // does not match to the parent hash, the current block will be deleted for there is a fork.
 func (ob *Observer) fetchBlock(curHeight, nextHeight int64, curBlockHash string) error {
-	blockAndPackageLogs, err := ob.BscExecutor.GetBlockAndTxEvents(nextHeight)
+	blockAndEventLogs, err := ob.Executor.GetBlockAndTxEvents(nextHeight)
 	if err != nil {
 		return fmt.Errorf("get block info error, height=%d, err=%s", nextHeight, err.Error())
 	}
 
-	parentHash := blockAndPackageLogs.ParentBlockHash
+	parentHash := blockAndEventLogs.ParentBlockHash
 	if curHeight != 0 && parentHash != curBlockHash {
 		return ob.DeleteBlockAndTxEvents(curHeight)
 	} else {
 		nextBlockLog := model.BlockLog{
-			BlockHash:  blockAndPackageLogs.BlockHash,
+			BlockHash:  blockAndEventLogs.BlockHash,
 			ParentHash: parentHash,
-			Height:     blockAndPackageLogs.Height,
-			BlockTime:  blockAndPackageLogs.BlockTime,
+			Height:     blockAndEventLogs.Height,
+			BlockTime:  blockAndEventLogs.BlockTime,
 		}
 
-		err := ob.SaveBlockAndTxEvents(&nextBlockLog, blockAndPackageLogs.Events)
+		err := ob.SaveBlockAndTxEvents(&nextBlockLog, blockAndEventLogs.Events)
 		if err != nil {
 			return err
 		}
@@ -110,7 +118,6 @@ func (ob *Observer) DeleteBlockAndTxEvents(height int64) error {
 	return tx.Commit().Error
 }
 
-// UpdateConfirmedNum updates confirmation number of cross-chain packages.
 func (ob *Observer) UpdateConfirmedNum(height int64) error {
 	err := ob.DB.Model(model.TxEventLog{}).Where("status = ?", model.TxStatusInit).Updates(
 		map[string]interface{}{
@@ -122,7 +129,7 @@ func (ob *Observer) UpdateConfirmedNum(height int64) error {
 	}
 
 	err = ob.DB.Model(model.TxEventLog{}).Where("status = ? and confirmed_num >= ?",
-		model.TxStatusInit, ob.Config.ChainConfig.BSCConfirmNum).Updates(
+		model.TxStatusInit, ob.ConfirmNum).Updates(
 		map[string]interface{}{
 			"status":      model.TxStatusConfirmed,
 			"update_time": time.Now().Unix(),
@@ -152,7 +159,6 @@ func (ob *Observer) Prune() {
 	}
 }
 
-// SaveBlockAndTxEvents saves block and packages to database
 func (ob *Observer) SaveBlockAndTxEvents(blockLog *model.BlockLog, packages []interface{}) error {
 	tx := ob.DB.Begin()
 	if err := tx.Error; err != nil {

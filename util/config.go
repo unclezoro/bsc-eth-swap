@@ -87,15 +87,17 @@ func (cfg *SecretKeyConfig) Validate() {
 }
 
 type ChainConfig struct {
-	BSCStartHeight int64  `json:"bsc_start_height"`
-	BSCProvider    string `json:"bsc_provider"`
-	BSCConfirmNum  int64  `json:"bsc_confirm_num"`
-	BSCChainId     string `json:"bsc_chain_id"`
+	BSCStartHeight      int64  `json:"bsc_start_height"`
+	BSCProvider         string `json:"bsc_provider"`
+	BSCConfirmNum       int64  `json:"bsc_confirm_num"`
+	BSCChainId          string `json:"bsc_chain_id"`
+	BSCSwapContractAddr string `json:"bsc_swap_contract_addr"`
 
-	ETHStartHeight int64  `json:"bsc_start_height"`
-	ETHProvider    string `json:"bsc_provider"`
-	ETHConfirmNum  int64  `json:"bsc_confirm_num"`
-	ETHChainId     string `json:"bsc_chain_id"`
+	ETHStartHeight      int64  `json:"eth_start_height"`
+	ETHProvider         string `json:"eth_provider"`
+	ETHConfirmNum       int64  `json:"eth_confirm_num"`
+	ETHChainId          string `json:"eth_chain_id"`
+	ETHSwapContractAddr string `json:"eth_swap_contract_addr"`
 }
 
 func (cfg *ChainConfig) Validate() {

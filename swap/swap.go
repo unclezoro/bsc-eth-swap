@@ -66,7 +66,7 @@ func getETHPrivateKey(cfg *util.Config) (*ecdsa.PrivateKey, error) {
 }
 
 // NewSwapper returns the Swapper instance
-func NewSwapper(db *gorm.DB, cfg *util.Config, bscExecutor executor.BscExecutor) (*Swapper, error) {
+func NewSwapper(db *gorm.DB, cfg *util.Config, bscExecutor executor.Executor) (*Swapper, error) {
 	bscPriKey, err := getBSCPrivateKey(cfg)
 	if err != nil {
 		return nil, err

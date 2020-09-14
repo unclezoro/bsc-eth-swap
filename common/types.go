@@ -10,8 +10,8 @@ const (
 )
 
 const (
-	ChainBSC = "bsc" // binance smart chain
-	ChainETH = "eth" // ethereum
+	ChainBSC = "BSC" // binance smart chain
+	ChainETH = "ETH" // ethereum
 )
 
 const (
