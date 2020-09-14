@@ -9,15 +9,17 @@ import (
 )
 
 type Config struct {
-	DBConfig    *DBConfig    `json:"db_config"`
-	ChainConfig *ChainConfig `json:"chain_config"`
-	LogConfig   *LogConfig   `json:"log_config"`
-	AlertConfig *AlertConfig `json:"alert_config"`
-	AdminConfig *AdminConfig `json:"admin_config"`
+	DBConfig        *DBConfig        `json:"db_config"`
+	SecretKeyConfig *SecretKeyConfig `json:"secret_key_config"`
+	ChainConfig     *ChainConfig     `json:"chain_config"`
+	LogConfig       *LogConfig       `json:"log_config"`
+	AlertConfig     *AlertConfig     `json:"alert_config"`
+	AdminConfig     *AdminConfig     `json:"admin_config"`
 }
 
 func (cfg *Config) Validate() {
 	cfg.DBConfig.Validate()
+	cfg.SecretKeyConfig.Validate()
 	cfg.ChainConfig.Validate()
 	cfg.LogConfig.Validate()
 	cfg.AlertConfig.Validate()
@@ -50,20 +52,50 @@ func (cfg *DBConfig) Validate() {
 	}
 }
 
+type SecretKeyConfig struct {
+	BSCKeyType          string `json:"bsc_key_type"`
+	BSCKeyAWSRegion     string `json:"bsc_key_aws_region"`
+	BSCKeyAWSSecretName string `json:"bsc_key_aws_secret_name"`
+	BSCPrivateKey       string `json:"bsc_private_key"`
+
+	ETHKeyType          string `json:"eth_key_type"`
+	ETHKeyAWSRegion     string `json:"eth_key_aws_region"`
+	ETHKeyAWSSecretName string `json:"eth_key_aws_secret_name"`
+	ETHPrivateKey       string `json:"eth_private_key"`
+}
+
+func (cfg *SecretKeyConfig) Validate() {
+	if cfg.BSCKeyType != common.AWSPrivateKey && cfg.BSCKeyType != common.LocalPrivateKey {
+		panic(fmt.Sprintf("BSC private key type only support %s and %s", common.AWSPrivateKey, common.LocalPrivateKey))
+	}
+	if cfg.BSCKeyType == common.AWSPrivateKey && (len(cfg.BSCKeyAWSRegion) == 0 || len(cfg.BSCKeyAWSSecretName) == 0) {
+		panic("missing aws_region or aws_secret_name for BSC private key")
+	}
+	if cfg.BSCKeyType == common.LocalPrivateKey && len(cfg.BSCPrivateKey) == 0 {
+		panic("missing local BSC private key")
+	}
+
+	if cfg.ETHKeyType != common.AWSPrivateKey && cfg.ETHKeyType != common.LocalPrivateKey {
+		panic(fmt.Sprintf("ETH private type only support %s and %s", common.AWSPrivateKey, common.LocalPrivateKey))
+	}
+	if cfg.ETHKeyType == common.AWSPrivateKey && (len(cfg.ETHKeyAWSSecretName) == 0 || len(cfg.ETHKeyAWSRegion) == 0) {
+		panic("missing aws_region or aws_secret_name for BSC private key")
+	}
+	if cfg.ETHKeyType == common.LocalPrivateKey && len(cfg.ETHPrivateKey) == 0 {
+		panic("missing local ETH private key")
+	}
+}
+
 type ChainConfig struct {
 	BSCStartHeight int64  `json:"bsc_start_height"`
 	BSCProvider    string `json:"bsc_provider"`
 	BSCConfirmNum  int64  `json:"bsc_confirm_num"`
 	BSCChainId     string `json:"bsc_chain_id"`
 
-	BBCStartHeight          int64  `json:"bbc_start_height"`
-	BBCRpcAddr              string `json:"bbc_rpc_addr"`
-	BBCBreatheBlockInterval int64  `json:"bbc_breathe_block_interval"`
-	GameStartHeightOnBC     int64  `json:"game_start_height_on_bc"`
-	GameEndHeightOnBC       int64  `json:"game_end_height_on_bc"`
-
-	AccumulatedValidatorRewardScoreLimit int64    `json:"accumulated_validator_reward_score_limit"`
-	BinanceValidators                    []string `json:"binance_validators"`
+	ETHStartHeight int64  `json:"bsc_start_height"`
+	ETHProvider    string `json:"bsc_provider"`
+	ETHConfirmNum  int64  `json:"bsc_confirm_num"`
+	ETHChainId     string `json:"bsc_chain_id"`
 }
 
 func (cfg *ChainConfig) Validate() {
@@ -77,11 +109,14 @@ func (cfg *ChainConfig) Validate() {
 		panic("bsc_confirm_num should be larger than 0")
 	}
 
-	if cfg.BBCRpcAddr == "" {
-		panic("bbc_rpc_addr should not be empty")
+	if cfg.ETHStartHeight < 0 {
+		panic("bsc_start_height should not be less than 0")
 	}
-	if cfg.BBCRpcAddr == "" {
-		panic("bbc_rpc_addr should not be empty")
+	if cfg.ETHProvider == "" {
+		panic("bsc_provider should not be empty")
+	}
+	if cfg.ETHConfirmNum <= 0 {
+		panic("bsc_confirm_num should be larger than 0")
 	}
 }
 

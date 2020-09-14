@@ -17,6 +17,9 @@ const (
 const (
 	DBDialectMysql   = "mysql"
 	DBDialectSqlite3 = "sqlite3"
+
+	LocalPrivateKey = "local_private_key"
+	AWSPrivateKey   = "aws_private_key"
 )
 
 type BlockAndEventLogs struct {
