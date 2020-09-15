@@ -103,7 +103,7 @@ func InitTables(db *gorm.DB) {
 		db.CreateTable(&TxEventLog{})
 		db.Model(&TxEventLog{}).AddIndex("idx_event_log_tx_hash", "tx_hash")
 		db.Model(&TxEventLog{}).AddIndex("idx_event_log_height", "height")
-		db.Model(&TxEventLog{}).AddIndex("idx_event_log_create_time", "create_time")
+		db.Model(&TxEventLog{}).AddIndex("idx_event_log_create_time", "created_at")
 	}
 
 	if !db.HasTable(&SwapTx{}) {

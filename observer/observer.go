@@ -122,7 +122,6 @@ func (ob *Observer) UpdateConfirmedNum(height int64) error {
 	err := ob.DB.Model(model.TxEventLog{}).Where("status = ?", model.TxStatusInit).Updates(
 		map[string]interface{}{
 			"confirmed_num": gorm.Expr("? - height", height+1),
-			"update_time":   time.Now().Unix(),
 		}).Error
 	if err != nil {
 		return err
@@ -131,8 +130,7 @@ func (ob *Observer) UpdateConfirmedNum(height int64) error {
 	err = ob.DB.Model(model.TxEventLog{}).Where("status = ? and confirmed_num >= ?",
 		model.TxStatusInit, ob.ConfirmNum).Updates(
 		map[string]interface{}{
-			"status":      model.TxStatusConfirmed,
-			"update_time": time.Now().Unix(),
+			"status": model.TxStatusConfirmed,
 		}).Error
 	if err != nil {
 		return err

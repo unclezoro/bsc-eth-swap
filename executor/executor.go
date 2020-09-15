@@ -105,6 +105,8 @@ func (e *ChainExecutor) GetLogs(header *types.Header) ([]interface{}, error) {
 		}
 
 		eventModel := event.ToTxLog(&log)
+		eventModel.Chain = e.Chain
+
 		eventModels = append(eventModels, eventModel)
 	}
 	return eventModels, nil

@@ -28,7 +28,7 @@ var (
 )
 
 // SwapProxyABI is the input ABI used to generate the binding from.
-const SwapProxyABI = "[{\"anonymous\":false,\"inputs\":[{\"indexed\":true,\"internalType\":\"address\",\"name\":\"fromAddr\",\"type\":\"address\"},{\"indexed\":true,\"internalType\":\"address\",\"name\":\"toAddr\",\"type\":\"address\"},{\"indexed\":true,\"internalType\":\"uint256\",\"name\":\"amount\",\"type\":\"uint256\"}],\"name\":\"feeTransfer\",\"type\":\"event\"},{\"anonymous\":false,\"inputs\":[{\"indexed\":true,\"internalType\":\"address\",\"name\":\"contractAddr\",\"type\":\"address\"},{\"indexed\":true,\"internalType\":\"address\",\"name\":\"fromAddr\",\"type\":\"address\"},{\"indexed\":true,\"internalType\":\"address\",\"name\":\"toAddr\",\"type\":\"address\"},{\"indexed\":false,\"internalType\":\"uint256\",\"name\":\"amount\",\"type\":\"uint256\"}],\"name\":\"tokenTransfer\",\"type\":\"event\"}]"
+const SwapProxyABI = "[{\"anonymous\":false,\"inputs\":[{\"indexed\":true,\"internalType\":\"address\",\"name\":\"contractAddr\",\"type\":\"address\"},{\"indexed\":true,\"internalType\":\"address\",\"name\":\"fromAddr\",\"type\":\"address\"},{\"indexed\":true,\"internalType\":\"address\",\"name\":\"toAddr\",\"type\":\"address\"},{\"indexed\":false,\"internalType\":\"uint256\",\"name\":\"amount\",\"type\":\"uint256\"},{\"indexed\":false,\"internalType\":\"uint256\",\"name\":\"feeAmount\",\"type\":\"uint256\"}],\"name\":\"tokenTransfer\",\"type\":\"event\"}]"
 
 // SwapProxy is an auto generated Go binding around an Ethereum contract.
 type SwapProxy struct {
@@ -172,167 +172,6 @@ func (_SwapProxy *SwapProxyTransactorRaw) Transact(opts *bind.TransactOpts, meth
 	return _SwapProxy.Contract.contract.Transact(opts, method, params...)
 }
 
-// SwapProxyFeeTransferIterator is returned from FilterFeeTransfer and is used to iterate over the raw logs and unpacked data for FeeTransfer events raised by the SwapProxy contract.
-type SwapProxyFeeTransferIterator struct {
-	Event *SwapProxyFeeTransfer // Event containing the contract specifics and raw log
-
-	contract *bind.BoundContract // Generic contract to use for unpacking event data
-	event    string              // Event name to use for unpacking event data
-
-	logs chan types.Log        // Log channel receiving the found contract events
-	sub  ethereum.Subscription // Subscription for errors, completion and termination
-	done bool                  // Whether the subscription completed delivering logs
-	fail error                 // Occurred error to stop iteration
-}
-
-// Next advances the iterator to the subsequent event, returning whether there
-// are any more events found. In case of a retrieval or parsing error, false is
-// returned and Error() can be queried for the exact failure.
-func (it *SwapProxyFeeTransferIterator) Next() bool {
-	// If the iterator failed, stop iterating
-	if it.fail != nil {
-		return false
-	}
-	// If the iterator completed, deliver directly whatever's available
-	if it.done {
-		select {
-		case log := <-it.logs:
-			it.Event = new(SwapProxyFeeTransfer)
-			if err := it.contract.UnpackLog(it.Event, it.event, log); err != nil {
-				it.fail = err
-				return false
-			}
-			it.Event.Raw = log
-			return true
-
-		default:
-			return false
-		}
-	}
-	// Iterator still in progress, wait for either a data or an error event
-	select {
-	case log := <-it.logs:
-		it.Event = new(SwapProxyFeeTransfer)
-		if err := it.contract.UnpackLog(it.Event, it.event, log); err != nil {
-			it.fail = err
-			return false
-		}
-		it.Event.Raw = log
-		return true
-
-	case err := <-it.sub.Err():
-		it.done = true
-		it.fail = err
-		return it.Next()
-	}
-}
-
-// Error returns any retrieval or parsing error occurred during filtering.
-func (it *SwapProxyFeeTransferIterator) Error() error {
-	return it.fail
-}
-
-// Close terminates the iteration process, releasing any pending underlying
-// resources.
-func (it *SwapProxyFeeTransferIterator) Close() error {
-	it.sub.Unsubscribe()
-	return nil
-}
-
-// SwapProxyFeeTransfer represents a FeeTransfer event raised by the SwapProxy contract.
-type SwapProxyFeeTransfer struct {
-	FromAddr common.Address
-	ToAddr   common.Address
-	Amount   *big.Int
-	Raw      types.Log // Blockchain specific contextual infos
-}
-
-// FilterFeeTransfer is a free log retrieval operation binding the contract event 0x678920f656d18bde4b16b44ec6b9e08279f263ceff242a4aece95f7abf31d41c.
-//
-// Solidity: event feeTransfer(address indexed fromAddr, address indexed toAddr, uint256 indexed amount)
-func (_SwapProxy *SwapProxyFilterer) FilterFeeTransfer(opts *bind.FilterOpts, fromAddr []common.Address, toAddr []common.Address, amount []*big.Int) (*SwapProxyFeeTransferIterator, error) {
-
-	var fromAddrRule []interface{}
-	for _, fromAddrItem := range fromAddr {
-		fromAddrRule = append(fromAddrRule, fromAddrItem)
-	}
-	var toAddrRule []interface{}
-	for _, toAddrItem := range toAddr {
-		toAddrRule = append(toAddrRule, toAddrItem)
-	}
-	var amountRule []interface{}
-	for _, amountItem := range amount {
-		amountRule = append(amountRule, amountItem)
-	}
-
-	logs, sub, err := _SwapProxy.contract.FilterLogs(opts, "feeTransfer", fromAddrRule, toAddrRule, amountRule)
-	if err != nil {
-		return nil, err
-	}
-	return &SwapProxyFeeTransferIterator{contract: _SwapProxy.contract, event: "feeTransfer", logs: logs, sub: sub}, nil
-}
-
-// WatchFeeTransfer is a free log subscription operation binding the contract event 0x678920f656d18bde4b16b44ec6b9e08279f263ceff242a4aece95f7abf31d41c.
-//
-// Solidity: event feeTransfer(address indexed fromAddr, address indexed toAddr, uint256 indexed amount)
-func (_SwapProxy *SwapProxyFilterer) WatchFeeTransfer(opts *bind.WatchOpts, sink chan<- *SwapProxyFeeTransfer, fromAddr []common.Address, toAddr []common.Address, amount []*big.Int) (event.Subscription, error) {
-
-	var fromAddrRule []interface{}
-	for _, fromAddrItem := range fromAddr {
-		fromAddrRule = append(fromAddrRule, fromAddrItem)
-	}
-	var toAddrRule []interface{}
-	for _, toAddrItem := range toAddr {
-		toAddrRule = append(toAddrRule, toAddrItem)
-	}
-	var amountRule []interface{}
-	for _, amountItem := range amount {
-		amountRule = append(amountRule, amountItem)
-	}
-
-	logs, sub, err := _SwapProxy.contract.WatchLogs(opts, "feeTransfer", fromAddrRule, toAddrRule, amountRule)
-	if err != nil {
-		return nil, err
-	}
-	return event.NewSubscription(func(quit <-chan struct{}) error {
-		defer sub.Unsubscribe()
-		for {
-			select {
-			case log := <-logs:
-				// New log arrived, parse the event and forward to the user
-				event := new(SwapProxyFeeTransfer)
-				if err := _SwapProxy.contract.UnpackLog(event, "feeTransfer", log); err != nil {
-					return err
-				}
-				event.Raw = log
-
-				select {
-				case sink <- event:
-				case err := <-sub.Err():
-					return err
-				case <-quit:
-					return nil
-				}
-			case err := <-sub.Err():
-				return err
-			case <-quit:
-				return nil
-			}
-		}
-	}), nil
-}
-
-// ParseFeeTransfer is a log parse operation binding the contract event 0x678920f656d18bde4b16b44ec6b9e08279f263ceff242a4aece95f7abf31d41c.
-//
-// Solidity: event feeTransfer(address indexed fromAddr, address indexed toAddr, uint256 indexed amount)
-func (_SwapProxy *SwapProxyFilterer) ParseFeeTransfer(log types.Log) (*SwapProxyFeeTransfer, error) {
-	event := new(SwapProxyFeeTransfer)
-	if err := _SwapProxy.contract.UnpackLog(event, "feeTransfer", log); err != nil {
-		return nil, err
-	}
-	return event, nil
-}
-
 // SwapProxyTokenTransferIterator is returned from FilterTokenTransfer and is used to iterate over the raw logs and unpacked data for TokenTransfer events raised by the SwapProxy contract.
 type SwapProxyTokenTransferIterator struct {
 	Event *SwapProxyTokenTransfer // Event containing the contract specifics and raw log
@@ -406,12 +245,13 @@ type SwapProxyTokenTransfer struct {
 	FromAddr     common.Address
 	ToAddr       common.Address
 	Amount       *big.Int
+	FeeAmount    *big.Int
 	Raw          types.Log // Blockchain specific contextual infos
 }
 
-// FilterTokenTransfer is a free log retrieval operation binding the contract event 0xfb08937c18a8d4b15e559e41ae0e3a6be8c85434f744c0743f224e9b48fdc4e5.
+// FilterTokenTransfer is a free log retrieval operation binding the contract event 0x05e8bebd9fcb5eb8e77fbd53c65340bcda78c0ff916583b5eff776e21316dced.
 //
-// Solidity: event tokenTransfer(address indexed contractAddr, address indexed fromAddr, address indexed toAddr, uint256 amount)
+// Solidity: event tokenTransfer(address indexed contractAddr, address indexed fromAddr, address indexed toAddr, uint256 amount, uint256 feeAmount)
 func (_SwapProxy *SwapProxyFilterer) FilterTokenTransfer(opts *bind.FilterOpts, contractAddr []common.Address, fromAddr []common.Address, toAddr []common.Address) (*SwapProxyTokenTransferIterator, error) {
 
 	var contractAddrRule []interface{}
@@ -434,9 +274,9 @@ func (_SwapProxy *SwapProxyFilterer) FilterTokenTransfer(opts *bind.FilterOpts, 
 	return &SwapProxyTokenTransferIterator{contract: _SwapProxy.contract, event: "tokenTransfer", logs: logs, sub: sub}, nil
 }
 
-// WatchTokenTransfer is a free log subscription operation binding the contract event 0xfb08937c18a8d4b15e559e41ae0e3a6be8c85434f744c0743f224e9b48fdc4e5.
+// WatchTokenTransfer is a free log subscription operation binding the contract event 0x05e8bebd9fcb5eb8e77fbd53c65340bcda78c0ff916583b5eff776e21316dced.
 //
-// Solidity: event tokenTransfer(address indexed contractAddr, address indexed fromAddr, address indexed toAddr, uint256 amount)
+// Solidity: event tokenTransfer(address indexed contractAddr, address indexed fromAddr, address indexed toAddr, uint256 amount, uint256 feeAmount)
 func (_SwapProxy *SwapProxyFilterer) WatchTokenTransfer(opts *bind.WatchOpts, sink chan<- *SwapProxyTokenTransfer, contractAddr []common.Address, fromAddr []common.Address, toAddr []common.Address) (event.Subscription, error) {
 
 	var contractAddrRule []interface{}
@@ -484,9 +324,9 @@ func (_SwapProxy *SwapProxyFilterer) WatchTokenTransfer(opts *bind.WatchOpts, si
 	}), nil
 }
 
-// ParseTokenTransfer is a log parse operation binding the contract event 0xfb08937c18a8d4b15e559e41ae0e3a6be8c85434f744c0743f224e9b48fdc4e5.
+// ParseTokenTransfer is a log parse operation binding the contract event 0x05e8bebd9fcb5eb8e77fbd53c65340bcda78c0ff916583b5eff776e21316dced.
 //
-// Solidity: event tokenTransfer(address indexed contractAddr, address indexed fromAddr, address indexed toAddr, uint256 amount)
+// Solidity: event tokenTransfer(address indexed contractAddr, address indexed fromAddr, address indexed toAddr, uint256 amount, uint256 feeAmount)
 func (_SwapProxy *SwapProxyFilterer) ParseTokenTransfer(log types.Log) (*SwapProxyTokenTransfer, error) {
 	event := new(SwapProxyTokenTransfer)
 	if err := _SwapProxy.contract.UnpackLog(event, "tokenTransfer", log); err != nil {

@@ -14,7 +14,7 @@ import (
 var (
 	TokenTransferEventName = "tokenTransfer"
 
-	TokenTransferEventHash = common.HexToHash("0xfb08937c18a8d4b15e559e41ae0e3a6be8c85434f744c0743f224e9b48fdc4e5")
+	TokenTransferEventHash = common.HexToHash("0x05e8bebd9fcb5eb8e77fbd53c65340bcda78c0ff916583b5eff776e21316dced")
 )
 
 type TokenTransferEvent struct {
@@ -25,7 +25,7 @@ type TokenTransferEvent struct {
 	FeeAmount    *big.Int
 }
 
-func (ev *TokenTransferEvent) ToTxLog(log *types.Log) interface{} {
+func (ev *TokenTransferEvent) ToTxLog(log *types.Log) *model.TxEventLog {
 	pack := &model.TxEventLog{
 		Chain: common2.ChainETH,
 
@@ -50,8 +50,9 @@ func ParseTokenTransferEvent(abi *abi.ABI, log *types.Log) (*TokenTransferEvent,
 		return nil, err
 	}
 
-	ev.Amount = big.NewInt(0).SetBytes(log.Topics[4].Bytes())
-	ev.FeeAmount = big.NewInt(0).SetBytes(log.Topics[5].Bytes())
+	ev.ContractAddr = common.BytesToAddress(log.Topics[1].Bytes())
+	ev.FromAddr = common.BytesToAddress(log.Topics[2].Bytes())
+	ev.ToAddr = common.BytesToAddress(log.Topics[3].Bytes())
 
 	return &ev, nil
 }

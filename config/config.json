@@ -1,0 +1,38 @@
+{
+  "db_config": {
+    "dialect": "sqlite3",
+    "db_path": "./test.db"
+  },
+  "chain_config": {
+    "bsc_start_height": 1928680,
+    "bsc_provider": "https://data-seed-prebsc-1-s1.binance.org:8545",
+    "bsc_confirm_num": 10,
+    "bsc_chain_id": 97,
+    "bsc_swap_contract_addr": "0x7b1f3B97c89f9A7B85fA96f47B30dE2DbFddFBc9",
+
+    "eth_start_height": 1928680,
+    "eth_provider": "https://data-seed-prebsc-1-s1.binance.org:8545",
+    "eth_confirm_num": 10,
+    "eth_chain_id": 97,
+    "eth_swap_contract_addr": "0x7b1f3B97c89f9A7B85fA96f47B30dE2DbFddFBc9"
+  },
+  "log_config": {
+    "level": "INFO",
+    "filename": "",
+    "max_file_size_in_mb": 0,
+    "max_backups_of_log_files": 0,
+    "max_age_to_retain_log_files_in_days": 0,
+    "use_console_logger": true,
+    "use_file_logger": false,
+    "compress": false
+  },
+  "admin_config": {
+    "listen_addr": ":9080"
+  },
+  "alert_config": {
+    "telegram_bot_id": "",
+    "telegram_chat_id": "",
+
+    "block_update_timeout": 300
+  }
+}

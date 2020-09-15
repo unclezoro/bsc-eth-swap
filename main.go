@@ -49,7 +49,7 @@ func initFlags() {
 }
 
 func printUsage() {
-	fmt.Print("usage: ./relayer --config-type [local or aws] --config-path config_file_path\n")
+	fmt.Print("usage: ./swap --config-type [local or aws] --config-path config_file_path\n")
 }
 
 func main() {
