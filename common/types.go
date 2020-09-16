@@ -22,6 +22,9 @@ const (
 	AWSPrivateKey   = "aws_private_key"
 )
 
+type SwapStatus string
+type SwapDirection string
+
 type BlockAndEventLogs struct {
 	Height          int64
 	Chain           string

@@ -57,10 +57,10 @@ func (ob *Observer) Fetch(startHeight int64) {
 			nextHeight = startHeight
 		}
 
-		util.Logger.Infof("fetch block, height=%d", nextHeight)
+		util.Logger.Infof("fetch %s block, height=%d", ob.Executor.GetChainName(), nextHeight)
 		err = ob.fetchBlock(curBlockLog.Height, nextHeight, curBlockLog.BlockHash)
 		if err != nil {
-			util.Logger.Errorf("fetch block error, err=%s", err.Error())
+			util.Logger.Errorf("fetch %s block error, err=%s", ob.Executor.GetChainName(), err.Error())
 			time.Sleep(common.ObserverFetchInterval)
 		}
 	}
@@ -83,6 +83,7 @@ func (ob *Observer) fetchBlock(curHeight, nextHeight int64, curBlockHash string)
 			ParentHash: parentHash,
 			Height:     blockAndEventLogs.Height,
 			BlockTime:  blockAndEventLogs.BlockTime,
+			Chain:      blockAndEventLogs.Chain,
 		}
 
 		err := ob.SaveBlockAndTxEvents(&nextBlockLog, blockAndEventLogs.Events)
@@ -110,7 +111,16 @@ func (ob *Observer) DeleteBlockAndTxEvents(height int64) error {
 		return err
 	}
 
-	if err := tx.Where("height = ? and status = ?", height, model.TxStatusInit).Delete(model.TxEventLog{}).Error; err != nil {
+	txEventLogList := make([]model.TxEventLog, 0)
+	ob.DB.Where("chain = ? and height = ? and status = ?", ob.Executor.GetChainName(), height, model.TxStatusInit).Find(&txEventLogList)
+	for _, txEventLog := range txEventLogList {
+		if err := tx.Where("deposit_tx_hash = ?", txEventLog.TxHash).Delete(model.Swap{}).Error; err != nil {
+			tx.Rollback()
+			return err
+		}
+	}
+
+	if err := tx.Where("chain = ? and height = ? and status = ?", ob.Executor.GetChainName(), height, model.TxStatusInit).Delete(model.TxEventLog{}).Error; err != nil {
 		tx.Rollback()
 		return err
 	}
@@ -119,7 +129,7 @@ func (ob *Observer) DeleteBlockAndTxEvents(height int64) error {
 }
 
 func (ob *Observer) UpdateConfirmedNum(height int64) error {
-	err := ob.DB.Model(model.TxEventLog{}).Where("status = ?", model.TxStatusInit).Updates(
+	err := ob.DB.Model(model.TxEventLog{}).Where("chain = ? and status = ?", ob.Executor.GetChainName(), model.TxStatusInit).Updates(
 		map[string]interface{}{
 			"confirmed_num": gorm.Expr("? - height", height+1),
 		}).Error
@@ -127,8 +137,8 @@ func (ob *Observer) UpdateConfirmedNum(height int64) error {
 		return err
 	}
 
-	err = ob.DB.Model(model.TxEventLog{}).Where("status = ? and confirmed_num >= ?",
-		model.TxStatusInit, ob.ConfirmNum).Updates(
+	err = ob.DB.Model(model.TxEventLog{}).Where("chain = ? and status = ? and confirmed_num >= ?",
+		ob.Executor.GetChainName(), model.TxStatusInit, ob.ConfirmNum).Updates(
 		map[string]interface{}{
 			"status": model.TxStatusConfirmed,
 		}).Error
@@ -149,7 +159,7 @@ func (ob *Observer) Prune() {
 
 			continue
 		}
-		err = ob.DB.Where("height < ?", curBlockLog.Height-common.ObserverMaxBlockNumber).Delete(model.BlockLog{}).Error
+		err = ob.DB.Where("chain = ? and height < ?", ob.Executor.GetChainName(), curBlockLog.Height-common.ObserverMaxBlockNumber).Delete(model.BlockLog{}).Error
 		if err != nil {
 			util.Logger.Infof("prune block logs error, err=%s", err.Error())
 		}
@@ -180,7 +190,7 @@ func (ob *Observer) SaveBlockAndTxEvents(blockLog *model.BlockLog, packages []in
 // GetCurrentBlockLog returns the highest block log
 func (ob *Observer) GetCurrentBlockLog() (*model.BlockLog, error) {
 	blockLog := model.BlockLog{}
-	err := ob.DB.Order("height desc").First(&blockLog).Error
+	err := ob.DB.Where("chain = ?", ob.Executor.GetChainName()).Order("height desc").First(&blockLog).Error
 	if err != nil && err != gorm.ErrRecordNotFound {
 		return nil, err
 	}

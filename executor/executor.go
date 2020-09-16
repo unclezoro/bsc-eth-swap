@@ -19,6 +19,7 @@ import (
 
 type Executor interface {
 	GetBlockAndTxEvents(height int64) (*common.BlockAndEventLogs, error)
+	GetChainName()string
 }
 
 type ChainExecutor struct {
@@ -30,24 +31,23 @@ type ChainExecutor struct {
 	Client        *ethclient.Client
 }
 
-func NewExecutor(chain string, provider string, swapAddr ethcmm.Address, config *util.Config) *ChainExecutor {
+func NewExecutor(chain string, ethClient *ethclient.Client, swapAddr string, config *util.Config) *ChainExecutor {
 	proxyAbi, err := abi.JSON(strings.NewReader(swapproxy.SwapProxyABI))
 	if err != nil {
 		panic("marshal abi error")
 	}
 
-	client, err := ethclient.Dial(provider)
-	if err != nil {
-		panic("new eth client error")
-	}
-
 	return &ChainExecutor{
 		Chain:         chain,
 		Config:        config,
-		SwapProxyAddr: swapAddr,
+		SwapProxyAddr: ethcmm.HexToAddress(swapAddr),
 		SwapProxyAbi:  proxyAbi,
-		Client:        client,
+		Client:       ethClient,
 	}
+}
+
+func (e *ChainExecutor) GetChainName() string {
+	return e.Chain
 }
 
 func (e *ChainExecutor) GetBlockAndTxEvents(height int64) (*common.BlockAndEventLogs, error) {
@@ -66,6 +66,7 @@ func (e *ChainExecutor) GetBlockAndTxEvents(height int64) (*common.BlockAndEvent
 
 	return &common.BlockAndEventLogs{
 		Height:          height,
+		Chain:           e.Chain,
 		BlockHash:       header.Hash().String(),
 		ParentBlockHash: header.ParentHash.String(),
 		BlockTime:       int64(header.Time),

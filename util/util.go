@@ -14,7 +14,7 @@ type TgAlerter struct {
 	ChatId string
 }
 
-func InitTgAlerter(cfg *AlertConfig) {
+func InitTgAlerter(cfg AlertConfig) {
 	tgAlerter = TgAlerter{
 		BotId:  cfg.TelegramBotId,
 		ChatId: cfg.TelegramChatId,

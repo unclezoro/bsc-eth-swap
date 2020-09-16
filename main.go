@@ -4,8 +4,7 @@ import (
 	"flag"
 	"fmt"
 
-	"github.com/binance-chain/go-sdk/common/types"
-	ethcmm "github.com/ethereum/go-ethereum/common"
+	"github.com/ethereum/go-ethereum/ethclient"
 	"github.com/jinzhu/gorm"
 	_ "github.com/jinzhu/gorm/dialects/mysql"
 	_ "github.com/jinzhu/gorm/dialects/sqlite"
@@ -16,6 +15,7 @@ import (
 	"github.com/binance-chain/bsc-eth-swap/executor"
 	"github.com/binance-chain/bsc-eth-swap/model"
 	"github.com/binance-chain/bsc-eth-swap/observer"
+	"github.com/binance-chain/bsc-eth-swap/swap"
 	"github.com/binance-chain/bsc-eth-swap/util"
 )
 
@@ -24,7 +24,6 @@ const (
 	flagConfigAwsRegion    = "aws-region"
 	flagConfigAwsSecretKey = "aws-secret-key"
 	flagConfigPath         = "config-path"
-	flagBBCNetwork         = "bbc-network"
 )
 
 const (
@@ -37,7 +36,6 @@ func initFlags() {
 	flag.String(flagConfigType, "", "config type, local or aws")
 	flag.String(flagConfigAwsRegion, "", "aws s3 region")
 	flag.String(flagConfigAwsSecretKey, "", "aws s3 secret key")
-	flag.Int(flagBBCNetwork, int(types.TestNetwork), "bbc chain network type")
 
 	pflag.CommandLine.AddGoFlagSet(flag.CommandLine)
 	pflag.Parse()
@@ -96,7 +94,7 @@ func main() {
 	config.Validate()
 
 	// init logger
-	util.InitLogger(*config.LogConfig)
+	util.InitLogger(config.LogConfig)
 	util.InitTgAlerter(config.AlertConfig)
 
 	db, err := gorm.Open(config.DBConfig.Dialect, config.DBConfig.DBPath)
@@ -106,13 +104,29 @@ func main() {
 	defer db.Close()
 	model.InitTables(db)
 
-	bscExecutor := executor.NewExecutor(common.ChainBSC, config.ChainConfig.BSCProvider, ethcmm.HexToAddress(config.ChainConfig.BSCSwapContractAddr), config)
+	bscClient, err := ethclient.Dial(config.ChainConfig.BSCProvider)
+	if err != nil {
+		panic("new eth client error")
+	}
+
+	ethClient, err := ethclient.Dial(config.ChainConfig.ETHProvider)
+	if err != nil {
+		panic("new eth client error")
+	}
+
+	bscExecutor := executor.NewExecutor(common.ChainBSC, bscClient, config.ChainConfig.BSCSwapContractAddr, config)
 	bscObserver := observer.NewObserver(db, config.ChainConfig.BSCStartHeight, config.ChainConfig.BSCConfirmNum, config, bscExecutor)
 	bscObserver.Start()
 
-	ethExecutor := executor.NewExecutor(common.ChainETH, config.ChainConfig.BSCProvider, ethcmm.HexToAddress(config.ChainConfig.ETHSwapContractAddr), config)
+	ethExecutor := executor.NewExecutor(common.ChainETH, ethClient, config.ChainConfig.ETHSwapContractAddr, config)
 	ethObserver := observer.NewObserver(db, config.ChainConfig.ETHStartHeight, config.ChainConfig.ETHConfirmNum, config, ethExecutor)
 	ethObserver.Start()
+
+	swapInstance, err := swap.NewSwapper(db, config, bscClient, ethClient)
+	if err != nil {
+		panic(fmt.Sprintf("create swap service error, err=%s", err.Error()))
+	}
+	swapInstance.Start()
 
 	select {}
 }
