@@ -4,9 +4,8 @@ import (
 	"flag"
 	"fmt"
 
-	ethcmm "github.com/ethereum/go-ethereum/common"
-
 	"github.com/binance-chain/go-sdk/common/types"
+	ethcmm "github.com/ethereum/go-ethereum/common"
 	"github.com/jinzhu/gorm"
 	_ "github.com/jinzhu/gorm/dialects/mysql"
 	_ "github.com/jinzhu/gorm/dialects/sqlite"
