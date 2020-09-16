@@ -33,12 +33,22 @@ func buildTokenInstance(tokens []model.Token) (map[string]*TokenInstance, error)
 		if err != nil {
 			return nil, err
 		}
+		lowBound := big.NewInt(0)
+		_, ok := lowBound.SetString(token.LowBound, 10)
+		if !ok {
+			panic(fmt.Sprintf("invalid lowBound amount: %s", token.LowBound))
+		}
+		upperBound := big.NewInt(0)
+		_, ok = upperBound.SetString(token.UpperBound, 10)
+		if !ok {
+			panic(fmt.Sprintf("invalid upperBound amount: %s", token.LowBound))
+		}
 
 		tokenPrivateKeys[token.Symbol] = &TokenInstance{
 			Symbol:          token.Symbol,
 			Name:            token.Name,
-			LowBound:        token.LowBound,
-			UpperBound:      token.UpperBound,
+			LowBound:        lowBound,
+			UpperBound:      upperBound,
 			BSCPrivateKey:   bscPriKey,
 			BSCContractAddr: ethcom.HexToAddress(token.BSCContractAddr),
 			ETHPrivateKey:   ethPriKey,

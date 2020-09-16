@@ -1,9 +1,9 @@
 package swap
 
 import (
+	"context"
 	"crypto/ecdsa"
 	"fmt"
-	"github.com/binance-chain/bsc-eth-swap/swap/erc20"
 	"math/big"
 	"time"
 
@@ -20,8 +20,8 @@ import (
 type TokenInstance struct {
 	Symbol     string
 	Name       string
-	LowBound   string
-	UpperBound string
+	LowBound   *big.Int
+	UpperBound *big.Int
 
 	BSCPrivateKey   *ecdsa.PrivateKey
 	BSCTxSender     ethcom.Address
@@ -86,7 +86,6 @@ func (swapper *Swapper) handleSwapDaemon() {
 			continue
 		}
 
-		util.Logger.Infof("found swap tx log")
 		for _, txEventLog := range txEventLogs {
 			var symbol string
 			var ok bool
@@ -116,8 +115,15 @@ func (swapper *Swapper) handleSwapDaemon() {
 				continue
 			}
 
+			swapAmount := big.NewInt(0)
+			_, ok = swapAmount.SetString(txEventLog.Amount, 10)
+			if !ok {
+				// log and mark the swap is failed for missing private key
+				continue
+			}
+
 			swapStatus := SwapTokenReceived
-			if txEventLog.Amount < tokenInstance.LowBound || txEventLog.Amount > tokenInstance.UpperBound {
+			if swapAmount.Cmp(tokenInstance.LowBound) < 0 || swapAmount.Cmp(tokenInstance.UpperBound) > 0 {
 				swapStatus = SwapQuoteRejected
 			}
 			swapDirection := SwapEth2BSC
@@ -165,7 +171,7 @@ func (swapper *Swapper) sendTokenDaemon() {
 			continue
 		}
 
-		util.Logger.Infof("found confirmed swap tx log")
+		util.Logger.Infof("found %d confirmed swap request", len(txEventLogs))
 
 		for _, txEventLog := range txEventLogs {
 			swap := model.Swap{}
@@ -175,6 +181,11 @@ func (swapper *Swapper) sendTokenDaemon() {
 				continue
 			}
 
+			if swap.Direction == SwapBSC2Eth {
+				util.Logger.Infof("%s swap %s:%s from BSC to ETH", swap.Sponsor, swap.Amount, swap.Symbol)
+			} else {
+				util.Logger.Infof("%s swap %s:%s from ETH to BSC", swap.Sponsor, swap.Amount, swap.Symbol)
+			}
 			err := swapper.doSwap(&swap)
 			if err != nil {
 				err = swapper.DB.Model(model.Swap{}).Where("uuid = ?", swap.UUID).Updates(
@@ -210,11 +221,11 @@ func (swapper *Swapper) sendTokenDaemon() {
 	}
 }
 func (swapper *Swapper) trackSwapDaemon() {
-
+	// TODO
 }
 
 func (swapper *Swapper) alertDaemon() {
-
+	// TODO
 }
 
 func (swapper *Swapper) doSwap(swap *model.Swap) error {
@@ -227,17 +238,13 @@ func (swapper *Swapper) doSwap(swap *model.Swap) error {
 	if !ok {
 		return fmt.Errorf("invalid swap amount: %s", swap.Amount)
 	}
-	//txInput, err := abiEncodeTransfer(ethcom.HexToAddress(swap.Sponsor), amount)
-	//if err != nil {
-	//	return err
-	//}
+	txInput, err := abiEncodeTransfer(ethcom.HexToAddress(swap.Sponsor), amount)
+	if err != nil {
+		return err
+	}
 
 	if swap.Direction == SwapEth2BSC {
-		erc20Instance, err := erc20.NewErc20(tokenInstance.BSCContractAddr, swapper.BSCClient)
-		if err != nil {
-			return err
-		}
-		tx, err := erc20Instance.Transfer(generateTxOpt(tokenInstance.BSCPrivateKey), ethcom.HexToAddress(swap.Sponsor), amount)
+		signedTx, err := buildSignedTransaction(swapper.BSCClient, tokenInstance.BSCPrivateKey, tokenInstance.BSCContractAddr, txInput)
 		if err != nil {
 			return err
 		}
@@ -249,23 +256,20 @@ func (swapper *Swapper) doSwap(swap *model.Swap) error {
 
 			DestiChain:         common.ChainBSC,
 			DestiAssetContract: tokenInstance.BSCContractAddr.String(),
-			TxHash:             tx.Hash().String(),
+			TxHash:             signedTx.Hash().String(),
 			Status:             model.TxStatusInit,
 		}
 		err = swapper.insertSwapTxToDB(swapTx)
 		if err != nil {
 			return err
 		}
-		//err = swapper.BSCClient.SendTransaction(context.Background(), signedTx)
-		//if err != nil {
-		//	return err
-		//}
-	} else {
-		erc20Instance, err := erc20.NewErc20(tokenInstance.ETHContractAddr, swapper.ETHClient)
+		err = swapper.BSCClient.SendTransaction(context.Background(), signedTx)
 		if err != nil {
 			return err
 		}
-		tx, err := erc20Instance.Transfer(generateTxOpt(tokenInstance.ETHPrivateKey), ethcom.HexToAddress(swap.Sponsor), amount)
+		util.Logger.Infof("Send transaction to BSC, %s/%s", swapper.Config.ChainConfig.BSCExplorerUrl, signedTx.Hash().String())
+	} else {
+		signedTx, err := buildSignedTransaction(swapper.ETHClient, tokenInstance.ETHPrivateKey, tokenInstance.ETHContractAddr, txInput)
 		if err != nil {
 			return err
 		}
@@ -277,17 +281,18 @@ func (swapper *Swapper) doSwap(swap *model.Swap) error {
 
 			DestiChain:         common.ChainETH,
 			DestiAssetContract: tokenInstance.BSCContractAddr.String(),
-			TxHash:             tx.Hash().String(),
+			TxHash:             signedTx.Hash().String(),
 			Status:             model.TxStatusInit,
 		}
 		err = swapper.insertSwapTxToDB(swapTx)
 		if err != nil {
 			return err
 		}
-		//err = swapper.ETHClient.SendTransaction(context.Background(), t)
-		//if err != nil {
-		//	return err
-		//}
+		err = swapper.ETHClient.SendTransaction(context.Background(), signedTx)
+		if err != nil {
+			return err
+		}
+		util.Logger.Infof("Send transaction to ETH, %s/%s", swapper.Config.ChainConfig.ETHExplorerUrl, signedTx.Hash().String())
 	}
 	return nil
 }

@@ -3,9 +3,9 @@ package model
 import (
 	"time"
 
-	"github.com/binance-chain/bsc-eth-swap/common"
-
 	"github.com/jinzhu/gorm"
+
+	"github.com/binance-chain/bsc-eth-swap/common"
 )
 
 type BlockLog struct {
@@ -41,21 +41,21 @@ const (
 
 type TxEventLog struct {
 	Id    int64
-	Chain string
+	Chain string `gorm:"not null;index:tx_event_log_chain"`
 
-	ContractAddress string
-	FromAddress     string
-	ToAddress       string
-	Amount          string
-	FeeAmount       string
+	ContractAddress string `gorm:"not null"`
+	FromAddress     string `gorm:"not null"`
+	ToAddress       string `gorm:"not null"`
+	Amount          string `gorm:"not null"`
+	FeeAmount       string `gorm:"not null"`
 
-	Status       TxStatus
-	TxHash       string
-	BlockHash    string
-	Height       int64
-	ConfirmedNum int64
+	Status       TxStatus `gorm:"not null;index:tx_event_log_status"`
+	TxHash       string   `gorm:"not null;index:tx_event_log_tx_hash"`
+	BlockHash    string   `gorm:"not null"`
+	Height       int64    `gorm:"not null"`
+	ConfirmedNum int64    `gorm:"not null"`
 
-	Phase TxPhase
+	Phase TxPhase `gorm:"not null;index:tx_event_log_phase"`
 
 	UpdateTime int64
 	CreateTime int64
@@ -93,7 +93,7 @@ type SwapTx struct {
 }
 
 func (SwapTx) TableName() string {
-	return "swap_tx"
+	return "swap_txs"
 }
 
 func (l *SwapTx) BeforeCreate() (err error) {
@@ -128,26 +128,27 @@ func (Swap) TableName() string {
 	return "swaps"
 }
 
-
 type Token struct {
 	Id int64
 
-	Symbol          string
-	Name            string
-	BSCContractAddr string
-	ETHContractAddr string
-	LowBound        string
-	UpperBound      string
+	Symbol          string `gorm:"unique;not null;index:symbol"`
+	Name            string `gorm:"not null"`
+	BSCContractAddr string `gorm:"not null"`
+	ETHContractAddr string `gorm:"not null"`
+	LowBound        string `gorm:"not null"`
+	UpperBound      string `gorm:"not null"`
 
-	BSCKeyType          string
+	BSCKeyType          string `gorm:"not null"`
 	BSCKeyAWSRegion     string
 	BSCKeyAWSSecretName string
-	BSCPrivateKey       string
+	BSCPrivateKey       string // won't present in production environment
+	BSCSendAddr         string `gorm:"not null"`
 
-	ETHKeyType          string
+	ETHKeyType          string `gorm:"not null"`
 	ETHKeyAWSRegion     string
 	ETHKeyAWSSecretName string
-	ETHPrivateKey       string
+	ETHPrivateKey       string // won't present in production environment
+	ETHSendAddr         string `gorm:"not null"`
 
 	UpdateTime int64
 	CreateTime int64
@@ -160,18 +161,10 @@ func (Token) TableName() string {
 func InitTables(db *gorm.DB) {
 	if !db.HasTable(&BlockLog{}) {
 		db.CreateTable(&BlockLog{})
-		db.Model(&BlockLog{}).AddIndex("idx_block_log_height", "height")
-		db.Model(&BlockLog{}).AddIndex("idx_block_log_create_time", "create_time")
 	}
 
 	if !db.HasTable(&TxEventLog{}) {
 		db.CreateTable(&TxEventLog{})
-		db.Model(&TxEventLog{}).AddIndex("idx_event_log_tx_hash", "tx_hash")
-		db.Model(&TxEventLog{}).AddIndex("idx_event_log_height", "height")
-		db.Model(&TxEventLog{}).AddIndex("idx_event_log_create_time", "create_time")
-		db.Model(&TxEventLog{}).AddIndex("idx_event_log_update_time", "update_time")
-		db.Model(&TxEventLog{}).AddIndex("idx_event_log_status", "status")
-		db.Model(&TxEventLog{}).AddIndex("idx_event_log_phase", "phase")
 	}
 
 	if !db.HasTable(&SwapTx{}) {
@@ -185,4 +178,6 @@ func InitTables(db *gorm.DB) {
 	if !db.HasTable(&Swap{}) {
 		db.CreateTable(&Swap{})
 	}
+
+	db.AutoMigrate(&Token{}, &SwapTx{}, &Swap{}, &TxEventLog{}, &BlockLog{})
 }

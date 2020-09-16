@@ -30,10 +30,12 @@ func TestInsertTokenConfig(t *testing.T)  {
 		BSCKeyAWSRegion:     "",
 		BSCKeyAWSSecretName: "",
 		BSCPrivateKey:       "26ca57a5b8e622c87b1f5816b54bed6b8f49357531929c4e29f1cd381c210678",
+		BSCSendAddr:         "0x277f8E924CfffF8FAbCae123B8e78dDa9e406384",
 		ETHKeyType:          "local",
 		ETHKeyAWSRegion:     "",
 		ETHKeyAWSSecretName: "",
 		ETHPrivateKey:       "26ca57a5b8e622c87b1f5816b54bed6b8f49357531929c4e29f1cd381c210678",
+		ETHSendAddr:         "0x277f8E924CfffF8FAbCae123B8e78dDa9e406384",
 		UpdateTime:          time.Now().Unix(),
 		CreateTime:          time.Now().Unix(),
 	}

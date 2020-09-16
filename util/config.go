@@ -55,11 +55,13 @@ type ChainConfig struct {
 	BSCProvider         string `json:"bsc_provider"`
 	BSCConfirmNum       int64  `json:"bsc_confirm_num"`
 	BSCSwapContractAddr string `json:"bsc_swap_contract_addr"`
+	BSCExplorerUrl      string `json:"bsc_explorer_url"`
 
 	ETHStartHeight      int64  `json:"eth_start_height"`
 	ETHProvider         string `json:"eth_provider"`
 	ETHConfirmNum       int64  `json:"eth_confirm_num"`
 	ETHSwapContractAddr string `json:"eth_swap_contract_addr"`
+	ETHExplorerUrl      string `json:"eth_explorer_url"`
 }
 
 func (cfg ChainConfig) Validate() {

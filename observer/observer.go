@@ -47,7 +47,7 @@ func (ob *Observer) Fetch(startHeight int64) {
 	for {
 		curBlockLog, err := ob.GetCurrentBlockLog()
 		if err != nil {
-			util.Logger.Errorf("get current block log error, err=%s", err.Error())
+			util.Logger.Errorf("get current block log from DB error: %s", err.Error())
 			time.Sleep(common.ObserverFetchInterval)
 			continue
 		}
@@ -60,7 +60,7 @@ func (ob *Observer) Fetch(startHeight int64) {
 		util.Logger.Infof("fetch %s block, height=%d", ob.Executor.GetChainName(), nextHeight)
 		err = ob.fetchBlock(curBlockLog.Height, nextHeight, curBlockLog.BlockHash)
 		if err != nil {
-			util.Logger.Errorf("fetch %s block error, err=%s", ob.Executor.GetChainName(), err.Error())
+			util.Logger.Debugf("fetch %s block error, err=%s", ob.Executor.GetChainName(), err.Error())
 			time.Sleep(common.ObserverFetchInterval)
 		}
 	}
