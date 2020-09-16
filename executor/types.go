@@ -7,7 +7,6 @@ import (
 	"github.com/ethereum/go-ethereum/common"
 	"github.com/ethereum/go-ethereum/core/types"
 
-	common2 "github.com/binance-chain/bsc-eth-swap/common"
 	"github.com/binance-chain/bsc-eth-swap/model"
 )
 
@@ -27,8 +26,6 @@ type TokenTransferEvent struct {
 
 func (ev *TokenTransferEvent) ToTxLog(log *types.Log) *model.TxEventLog {
 	pack := &model.TxEventLog{
-		Chain: common2.ChainETH,
-
 		ContractAddress: ev.ContractAddr.String(),
 		FromAddress:     ev.FromAddr.String(),
 		ToAddress:       ev.ToAddr.String(),
