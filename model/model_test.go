@@ -10,7 +10,7 @@ import (
 )
 
 func TestInsertTokenConfig(t *testing.T)  {
-	db, err := gorm.Open("sqlite3", "/Users/liuhaoyang/workspace/bsc-eth-swap/bsc-eth-swap/build/test.db")
+	db, err := gorm.Open("mysql", "root:ethswap123123@(localhost:3306)/ethswap?charset=utf8&parseTime=True&loc=Local")
 	if err != nil {
 		panic(fmt.Sprintf("open db error, err=%s", err.Error()))
 	}
@@ -20,6 +20,7 @@ func TestInsertTokenConfig(t *testing.T)  {
 	token := Token{
 		Symbol:              "FT",
 		Name:                "FT TOKEN",
+		Decimals:            18,
 		BSCContractAddr:     "0x6e491b5569a30935bc961377957212e27cD85Ba5",
 		ETHContractAddr:     "0x8A1a84726AbE38764D34c848021F8860691FdDB3",
 		LowBound:            "0",

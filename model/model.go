@@ -78,6 +78,7 @@ type SwapTx struct {
 	SwapRequestTxHash string `gorm:"not null;index:swap_request_tx_hash"`
 	Symbol            string `gorm:"not null"`
 	Amount            string `gorm:"not null"`
+	Decimals          int    `gorm:"not null"`
 
 	DestiChain         string `gorm:"not null;index:desti_chain"`
 	DestiAssetContract string `gorm:"not null;index:desti_chain"`
@@ -113,10 +114,11 @@ type Swap struct {
 
 	Symbol    string               `gorm:"not null;index:swap_symbol"`
 	Amount    string               `gorm:"not null;index:swap_amount"`
+	Decimals  int    			   `gorm:"not null"`
 	Direction common.SwapDirection `gorm:"not null"`
 
 	// The tx hash confirmed deposit
-	DepositTxHash string `gorm:"not null"`
+	DepositTxHash  string `gorm:"not null;index:swap_deposit_tx_hash"`
 	// The tx hash confirmed withdraw
 	WithdrawTxHash string
 
@@ -133,6 +135,7 @@ type Token struct {
 
 	Symbol          string `gorm:"unique;not null;index:symbol"`
 	Name            string `gorm:"not null"`
+	Decimals        int    `gorm:"not null"`
 	BSCContractAddr string `gorm:"not null"`
 	ETHContractAddr string `gorm:"not null"`
 	LowBound        string `gorm:"not null"`

@@ -47,6 +47,7 @@ func buildTokenInstance(tokens []model.Token) (map[string]*TokenInstance, error)
 		tokenPrivateKeys[token.Symbol] = &TokenInstance{
 			Symbol:          token.Symbol,
 			Name:            token.Name,
+			Decimals:        token.Decimals,
 			LowBound:        lowBound,
 			UpperBound:      upperBound,
 			BSCPrivateKey:   bscPriKey,

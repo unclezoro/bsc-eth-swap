@@ -20,6 +20,7 @@ import (
 type TokenInstance struct {
 	Symbol     string
 	Name       string
+	Decimals   int
 	LowBound   *big.Int
 	UpperBound *big.Int
 
@@ -136,6 +137,7 @@ func (swapper *Swapper) handleSwapDaemon() {
 				Sponsor:        txEventLog.FromAddress,
 				Symbol:         symbol,
 				Amount:         txEventLog.Amount,
+				Decimals:       tokenInstance.Decimals,
 				Direction:      swapDirection,
 				DepositTxHash:  txEventLog.TxHash,
 				WithdrawTxHash: "",
