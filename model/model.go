@@ -129,7 +129,7 @@ func (Swap) TableName() string {
 }
 
 type Token struct {
-	Id int64
+	gorm.Model
 
 	Symbol          string `gorm:"unique;not null;index:symbol"`
 	Name            string `gorm:"not null"`
@@ -149,9 +149,6 @@ type Token struct {
 	ETHKeyAWSSecretName string
 	ETHPrivateKey       string // won't present in production environment
 	ETHSendAddr         string `gorm:"not null"`
-
-	UpdateTime int64
-	CreateTime int64
 }
 
 func (Token) TableName() string {

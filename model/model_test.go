@@ -3,12 +3,10 @@ package model
 import (
 	"fmt"
 	"github.com/jinzhu/gorm"
-	"github.com/stretchr/testify/require"
-	"testing"
-	"time"
-
 	_ "github.com/jinzhu/gorm/dialects/mysql"
 	_ "github.com/jinzhu/gorm/dialects/sqlite"
+	"github.com/stretchr/testify/require"
+	"testing"
 )
 
 func TestInsertTokenConfig(t *testing.T)  {
@@ -36,8 +34,6 @@ func TestInsertTokenConfig(t *testing.T)  {
 		ETHKeyAWSSecretName: "",
 		ETHPrivateKey:       "26ca57a5b8e622c87b1f5816b54bed6b8f49357531929c4e29f1cd381c210678",
 		ETHSendAddr:         "0x277f8E924CfffF8FAbCae123B8e78dDa9e406384",
-		UpdateTime:          time.Now().Unix(),
-		CreateTime:          time.Now().Unix(),
 	}
 
 	tx := db.Begin()
