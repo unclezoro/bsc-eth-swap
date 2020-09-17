@@ -160,4 +160,16 @@ func getCallOpts() (*bind.CallOpts, error) {
 	return callOpts, nil
 }
 
+func getAddress(privateKey string) (ethcom.Address, error) {
+	privKey, err := crypto.HexToECDSA(privateKey)
+	if err != nil {
+		return ethcom.Address{}, err
+	}
+	publicKey := privKey.Public()
+	publicKeyECDSA, ok := publicKey.(*ecdsa.PublicKey)
+	if !ok {
+		return ethcom.Address{}, fmt.Errorf("get public key error")
+	}
+	return crypto.PubkeyToAddress(*publicKeyECDSA), nil
+}
 

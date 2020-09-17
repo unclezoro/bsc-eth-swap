@@ -27,16 +27,22 @@ func (l *BlockLog) BeforeCreate() (err error) {
 	return nil
 }
 
-type TxStatus int
+type DepositTxStatus int
 type TxPhase int
+type WithdrawTxStatus int
 
 const (
-	TxStatusInit      TxStatus = 0
-	TxStatusConfirmed TxStatus = 1
+	TxStatusInit      DepositTxStatus = 0
+	TxStatusConfirmed DepositTxStatus = 1
 
 	SeenSwapRequest    TxPhase = 0
 	ConfirmSwapRequest TxPhase = 1
 	AckSwapRequest     TxPhase = 2
+
+	WithdrawTxCreated WithdrawTxStatus = 0
+	WithdrawTxSent    WithdrawTxStatus = 1
+	WithdrawTxSuccess WithdrawTxStatus = 2
+	WithdrawTxFailed  WithdrawTxStatus = 3
 )
 
 type TxEventLog struct {
@@ -49,11 +55,11 @@ type TxEventLog struct {
 	Amount          string `gorm:"not null"`
 	FeeAmount       string `gorm:"not null"`
 
-	Status       TxStatus `gorm:"not null;index:tx_event_log_status"`
-	TxHash       string   `gorm:"not null;index:tx_event_log_tx_hash"`
-	BlockHash    string   `gorm:"not null"`
-	Height       int64    `gorm:"not null"`
-	ConfirmedNum int64    `gorm:"not null"`
+	Status       DepositTxStatus `gorm:"not null;index:tx_event_log_status"`
+	TxHash       string          `gorm:"not null;index:tx_event_log_tx_hash"`
+	BlockHash    string          `gorm:"not null"`
+	Height       int64           `gorm:"not null"`
+	ConfirmedNum int64           `gorm:"not null"`
 
 	Phase TxPhase `gorm:"not null;index:tx_event_log_phase"`
 
@@ -72,41 +78,24 @@ func (l *TxEventLog) BeforeCreate() (err error) {
 }
 
 type SwapTx struct {
-	Id int64
+	gorm.Model
 
-	SourceChain       string `gorm:"not null;index:source_chain"`
-	SwapRequestTxHash string `gorm:"not null;index:swap_request_tx_hash"`
-	Symbol            string `gorm:"not null"`
-	Amount            string `gorm:"not null"`
-	Decimals          int    `gorm:"not null"`
-
-	DestiChain         string `gorm:"not null;index:desti_chain"`
-	DestiAssetContract string `gorm:"not null;index:desti_chain"`
-	TxHash             string `gorm:"not null"`
-	ConsumedFeeAmount  string
-	BlockHash          string
-	Height             int64
-	ConfirmedNum       int64
-	Status             TxStatus `gorm:"not null"`
-
-	UpdateTime int64
-	CreateTime int64
+	Direction         common.SwapDirection `gorm:"not null"`
+	DepositTxHash     string               `gorm:"not null;index:swap_tx_deposit_tx_hash"`
+	WithdrawTxHash    string               `gorm:"not null;index:swap_tx_withdraw_tx_hash"`
+	TxData            string               `gorm:"type:text;not null"`
+	ConsumedFeeAmount string
+	Height            int64
+	Status            WithdrawTxStatus     `gorm:"not null"`
+	RetryCounter      int64
 }
 
 func (SwapTx) TableName() string {
 	return "swap_txs"
 }
 
-func (l *SwapTx) BeforeCreate() (err error) {
-	l.CreateTime = time.Now().Unix()
-	l.UpdateTime = time.Now().Unix()
-	return nil
-}
-
 type Swap struct {
 	gorm.Model
-
-	UUID string `gorm:"unique;not null;index:swap_uuid"`
 
 	Status common.SwapStatus `gorm:"not null;index:swap_status"`
 	// the user addreess who start this swap
@@ -138,6 +127,7 @@ type Token struct {
 	Decimals        int    `gorm:"not null"`
 	BSCContractAddr string `gorm:"unique;not null"`
 	ETHContractAddr string `gorm:"unique;not null"`
+	Available       bool   `gorm:"not null;index:available"`
 	LowBound        string `gorm:"not null"`
 	UpperBound      string `gorm:"not null"`
 
