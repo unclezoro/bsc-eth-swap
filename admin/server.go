@@ -79,13 +79,13 @@ func (admin *Admin) AddToken(w http.ResponseWriter, r *http.Request) {
 	// check decimals
 	bscDecimals, err := admin.BSCExecutor.GetContractDecimals(common.HexToAddress(newToken.BSCContractAddr))
 	if err != nil {
-		http.Error(w, err.Error(), http.StatusInternalServerError)
+		http.Error(w, fmt.Sprintf("get bsc decimals error, addr=%s, err=%s", newToken.BSCContractAddr, err.Error()), http.StatusInternalServerError)
 		return
 	}
 
-	ethDecimals, err := admin.BSCExecutor.GetContractDecimals(common.HexToAddress(newToken.ETHContractAddr))
+	ethDecimals, err := admin.ETHExecutor.GetContractDecimals(common.HexToAddress(newToken.ETHContractAddr))
 	if err != nil {
-		http.Error(w, err.Error(), http.StatusInternalServerError)
+		http.Error(w, fmt.Sprintf("get eth decimals error, addr=%s, err=%s", newToken.ETHContractAddr, err.Error()), http.StatusInternalServerError)
 		return
 	}
 
