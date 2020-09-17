@@ -12,20 +12,22 @@ import (
 )
 
 const (
-	SwapTokenReceived common.SwapStatus = "received"
-	SwapQuoteRejected common.SwapStatus = "rejected"
-	SwapSent          common.SwapStatus = "sent"
-	SwapSendFailed    common.SwapStatus = "sent_fail"
-	SwapSuccess       common.SwapStatus = "sent_success"
+	SwapTokenReceived  common.SwapStatus = "received"
+	SwapQuoteRejected  common.SwapStatus = "rejected"
+	SwapQuoteConfirmed common.SwapStatus = "confirmed"
+	SwapQuoteSending   common.SwapStatus = "sending"
+	SwapSent           common.SwapStatus = "sent"
+	SwapSendFailed     common.SwapStatus = "sent_fail"
+	SwapSuccess        common.SwapStatus = "sent_success"
 
 	SwapEth2BSC common.SwapDirection = "eth_bsc"
 	SwapBSC2Eth common.SwapDirection = "bsc_eth"
 
-	BatchSize         = 10
-	SleepTime         = 5
-	MaxBroadcastRetry = 5
+	BatchSize       = 10
+	SleepTime       = 6
+	MaxTrackerRetry = 100
 
-	TxFailedStatus    = 0x00
+	TxFailedStatus = 0x00
 )
 
 type Swapper struct {

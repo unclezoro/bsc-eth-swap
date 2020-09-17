@@ -83,11 +83,11 @@ type SwapTx struct {
 	Direction         common.SwapDirection `gorm:"not null"`
 	DepositTxHash     string               `gorm:"not null;index:swap_tx_deposit_tx_hash"`
 	WithdrawTxHash    string               `gorm:"not null;index:swap_tx_withdraw_tx_hash"`
-	TxData            string               `gorm:"type:text;not null"`
+	GasPrice          string               `gorm:"not null"`
 	ConsumedFeeAmount string
 	Height            int64
 	Status            WithdrawTxStatus     `gorm:"not null"`
-	RetryCounter      int64
+	TrackRetryCounter int64
 }
 
 func (SwapTx) TableName() string {

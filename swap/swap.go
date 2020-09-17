@@ -7,12 +7,9 @@ import (
 	"strings"
 	"time"
 
-	"github.com/ethereum/go-ethereum/common/hexutil"
-
 	ethcom "github.com/ethereum/go-ethereum/common"
 	"github.com/ethereum/go-ethereum/core/types"
 	"github.com/ethereum/go-ethereum/ethclient"
-	"github.com/ethereum/go-ethereum/rlp"
 	"github.com/jinzhu/gorm"
 
 	"github.com/binance-chain/bsc-eth-swap/common"
@@ -79,14 +76,15 @@ func (swapper *Swapper) syncTokenSendAddress() error {
 }
 
 func (swapper *Swapper) Start() {
+	go swapper.monitorSwapRequestDaemon()
+	go swapper.confirmSwapRequestDaemon()
 	go swapper.handleSwapDaemon()
-	go swapper.sendTokenDaemon()
-	go swapper.broadcastRetrySwapTxDaemon()
+	go swapper.monitorUncertainSwapTxDaemon()
 	go swapper.trackSwapTxDaemon()
 	go swapper.alertDaemon()
 }
 
-func (swapper *Swapper) handleSwapDaemon() {
+func (swapper *Swapper) monitorSwapRequestDaemon() {
 	for {
 		txEventLogs := make([]model.TxEventLog, BatchSize)
 		swapper.DB.Where("phase = ?", model.SeenSwapRequest).Order("height asc").Limit(BatchSize).Find(&txEventLogs)
@@ -97,26 +95,27 @@ func (swapper *Swapper) handleSwapDaemon() {
 		}
 
 		for _, txEventLog := range txEventLogs {
-			swap, err := swapper.createSwap(&txEventLog)
+			swap := swapper.createSwap(&txEventLog)
+
+			err := swapper.insertSwapToDB(swap)
 			if err != nil {
-				util.Logger.Errorf("Encounter failure in create swap: %s", err.Error())
+				util.Logger.Errorf("failed to persistent swap: %s", err.Error())
+				// TODO add alert
+				continue
 			}
-			if swap != nil {
-				// mark tx_event_log as processed
-				err = swapper.DB.Model(model.TxEventLog{}).Where("tx_hash = ?", swap.DepositTxHash).Updates(
-					map[string]interface{}{
-						"phase":       model.ConfirmSwapRequest,
-						"update_time": time.Now().Unix(),
-					}).Error
-				if err != nil {
-					util.Logger.Errorf("update %s table failed: %s", model.TxEventLog{}.TableName(), err.Error())
-				}
+			err = swapper.DB.Model(model.TxEventLog{}).Where("tx_hash = ?", swap.DepositTxHash).Updates(
+				map[string]interface{}{
+					"phase":       model.ConfirmSwapRequest,
+					"update_time": time.Now().Unix(),
+				}).Error
+			if err != nil {
+				util.Logger.Errorf("update %s table failed: %s", model.TxEventLog{}.TableName(), err.Error())
 			}
 		}
 	}
 }
 
-func (swapper *Swapper) createSwap(txEventLog *model.TxEventLog) (*model.Swap, error) {
+func (swapper *Swapper) createSwap(txEventLog *model.TxEventLog) *model.Swap {
 	sponsor := txEventLog.FromAddress
 	amount := txEventLog.Amount
 	depositTxHash := txEventLog.TxHash
@@ -177,14 +176,10 @@ func (swapper *Swapper) createSwap(txEventLog *model.TxEventLog) (*model.Swap, e
 		Log:            log,
 	}
 
-	err = swapper.insertSwapToDB(swap)
-	if err != nil {
-		return nil, fmt.Errorf("failed to persistent swap: %s", err.Error())
-	}
-	return swap, nil
+	return swap
 }
 
-func (swapper *Swapper) sendTokenDaemon() {
+func (swapper *Swapper) confirmSwapRequestDaemon() {
 	for {
 		txEventLogs := make([]model.TxEventLog, BatchSize)
 		swapper.DB.Where("status = ? and phase = ?", model.TxStatusConfirmed, model.ConfirmSwapRequest).
@@ -195,22 +190,26 @@ func (swapper *Swapper) sendTokenDaemon() {
 			continue
 		}
 
-		util.Logger.Infof("found %d confirmed swap request", len(txEventLogs))
+		util.Logger.Infof("found %d confirmed event logs", len(txEventLogs))
 
 		for _, txEventLog := range txEventLogs {
 			swap := model.Swap{}
 			swapper.DB.Where("deposit_tx_hash = ?", txEventLog.TxHash).First(&swap)
+			if swap.DepositTxHash == "" { // empty swap
+				// TODO add alert
+				continue
+			}
 			if swap.Status == SwapQuoteRejected {
 				util.Logger.Debugf("swap is rejected, deposit txHash: %s", swap.DepositTxHash)
 			} else {
-				if swap.Direction == SwapBSC2Eth {
-					util.Logger.Infof("%s swap %s:%s from BSC to ETH", swap.Sponsor, swap.Amount, swap.Symbol)
-				} else {
-					util.Logger.Infof("%s swap %s:%s from ETH to BSC", swap.Sponsor, swap.Amount, swap.Symbol)
-				}
-				err := swapper.doSwap(&swap)
+				err := swapper.DB.Model(model.Swap{}).Where("deposit_tx_hash = ?", txEventLog.TxHash).Updates(
+					map[string]interface{}{
+						"status":     SwapQuoteConfirmed,
+						"updated_at": time.Now().Unix(),
+					}).Error
 				if err != nil {
-					util.Logger.Errorf("doSwap failed: %s", err.Error())
+					util.Logger.Errorf("update %s table failed: %s", model.Swap{}, err.Error())
+					// TODO Add alert
 				}
 			}
 
@@ -226,142 +225,54 @@ func (swapper *Swapper) sendTokenDaemon() {
 	}
 }
 
-func (swapper *Swapper) broadcastRetrySwapTxDaemon() {
+func (swapper *Swapper) handleSwapDaemon() {
 	for {
+		swaps := make([]model.Swap, BatchSize)
+		swapper.DB.Where("status = ?", SwapQuoteConfirmed).Order("id asc").Limit(BatchSize).Find(&swaps)
 
-		time.Sleep(SleepTime * time.Second)
-
-		swapTxs := make([]model.SwapTx, BatchSize)
-		swapper.DB.Where("status = ? and retry_counter < ?", model.WithdrawTxCreated, MaxBroadcastRetry).Order("id asc").Limit(BatchSize).Find(&swapTxs)
-
-		if len(swapTxs) > 0 {
-			util.Logger.Infof("Try to broadcast %d swap txs", len(swapTxs))
+		if len(swaps) == 0 {
+			time.Sleep(SleepTime * time.Second)
+			continue
 		}
 
-		for _, swapTx := range swapTxs {
-			func() {
-				var signedTx types.Transaction
-				txData, err := hexutil.Decode(swapTx.TxData)
-				if err != nil {
-					util.Logger.Errorf("txData hex decoding error: %s", err.Error())
-					return
-				}
-				err = rlp.DecodeBytes(txData, &signedTx)
-				if err != nil {
-					util.Logger.Errorf("txData rlp decoding error: %s", err.Error())
-					return
-				}
-				if swapTx.Direction == SwapEth2BSC {
-					err = swapper.BSCClient.SendTransaction(context.Background(), &signedTx)
-					if err != nil {
-						util.Logger.Errorf("broadcast tx to BSC error: %s", err.Error())
-						return
-					} else {
-						util.Logger.Infof("Send transaction to BSC, %s/%s", swapper.Config.ChainConfig.BSCExplorerUrl, signedTx.Hash().String())
-						return
-					}
-				} else {
-					err = swapper.ETHClient.SendTransaction(context.Background(), &signedTx)
-					if err != nil {
-						util.Logger.Errorf("broadcast tx to ETH error: %s", err.Error())
-						return
-					} else {
-						util.Logger.Infof("Send transaction to ETH, %s/%s", swapper.Config.ChainConfig.ETHExplorerUrl, signedTx.Hash().String())
-						return
-					}
-				}
-			}()
-			err := swapper.DB.Model(model.SwapTx{}).Where("deposit_tx_hash = ?", swapTx.DepositTxHash).Updates(
+		util.Logger.Infof("found %d confirmed swap requests", len(swaps))
+
+		for _, swap := range swaps {
+			err := swapper.DB.Model(model.Swap{}).Where("id = ?", swap.ID).Updates(
 				map[string]interface{}{
-					"status":        model.WithdrawTxSent,
-					"retry_counter": gorm.Expr("retry_counter + 1"),
-					"updated_at":    time.Now().Unix(),
+					"status":     SwapQuoteSending,
+					"updated_at": time.Now().Unix(),
+				}).Error
+			if err != nil {
+				util.Logger.Errorf("update %s table failed: %s", model.Swap{}, err.Error())
+				// TODO Add alert
+			}
+
+			err = swapper.doSwap(&swap)
+			if err != nil {
+				util.Logger.Errorf("do swap failure: %s", err.Error())
+				//TODO add alert
+				continue
+			}
+			err = swapper.DB.Model(model.SwapTx{}).Where("deposit_tx_hash = ?", swap.DepositTxHash).Updates(
+				map[string]interface{}{
+					"status":     model.WithdrawTxSent,
+					"updated_at": time.Now().Unix(),
 				}).Error
 			if err != nil {
 				util.Logger.Errorf("update table %s failed: %s", model.SwapTx{}.TableName(), err.Error())
 			}
-
-			err = swapper.DB.Model(model.Swap{}).Where("deposit_tx_hash = ?", swapTx.DepositTxHash).Updates(
+			err = swapper.DB.Model(model.Swap{}).Where("id = ?", swap.ID).Updates(
 				map[string]interface{}{
 					"status":     SwapSent,
 					"updated_at": time.Now().Unix(),
 				}).Error
 			if err != nil {
 				util.Logger.Errorf("update %s table failed: %s", model.Swap{}, err.Error())
+				// TODO Add alert
 			}
 		}
 	}
-}
-
-func (swapper *Swapper) trackSwapTxDaemon() {
-	for {
-		time.Sleep(SleepTime * time.Second)
-
-		swapTxs := make([]model.SwapTx, BatchSize)
-		swapper.DB.Where("status = ?", model.WithdrawTxSent).Order("id asc").Limit(BatchSize).Find(&swapTxs)
-
-		if len(swapTxs) > 0 {
-			util.Logger.Infof("Track %d swap txs", len(swapTxs))
-		}
-
-		for _, swapTx := range swapTxs {
-			if swapTx.Direction == SwapBSC2Eth {
-				block, err := swapper.ETHClient.BlockByNumber(context.Background(), nil)
-				if err != nil {
-					util.Logger.Debugf("ETH, query block failed: %s", err.Error())
-					continue
-				}
-				txRecipient, err := swapper.ETHClient.TransactionReceipt(context.Background(), ethcom.HexToHash(swapTx.WithdrawTxHash))
-				if err != nil {
-					util.Logger.Debugf("ETH, query tx failed: %s", err.Error())
-					continue
-				}
-				if txRecipient.Status == TxFailedStatus {
-					err = swapper.DB.Model(model.SwapTx{}).Where("deposit_tx_hash = ?", swapTx.DepositTxHash).Updates(
-						map[string]interface{}{
-							"status":     model.WithdrawTxFailed,
-							"updated_at": time.Now().Unix(),
-						}).Error
-					if err != nil {
-						util.Logger.Errorf("update table %s failed: %s", model.SwapTx{}.TableName(), err.Error())
-					}
-					err = swapper.DB.Model(model.Swap{}).Where("deposit_tx_hash = ?", swapTx.DepositTxHash).Updates(
-						map[string]interface{}{
-							"status":     SwapSendFailed,
-							"updated_at": time.Now().Unix(),
-						}).Error
-					if err != nil {
-						util.Logger.Errorf("update table %s failed: %s", model.Swap{}.TableName(), err.Error())
-					}
-					continue
-				}
-
-				if block.Number().Int64() >= txRecipient.BlockNumber.Int64()+swapper.Config.ChainConfig.ETHConfirmNum {
-					err = swapper.DB.Model(model.SwapTx{}).Where("deposit_tx_hash = ?", swapTx.DepositTxHash).Updates(
-						map[string]interface{}{
-							"status":     model.WithdrawTxSuccess,
-							"updated_at": time.Now().Unix(),
-						}).Error
-					if err != nil {
-						util.Logger.Errorf("update table %s failed: %s", model.SwapTx{}.TableName(), err.Error())
-					}
-
-					err = swapper.DB.Model(model.Swap{}).Where("deposit_tx_hash = ?", swapTx.DepositTxHash).Updates(
-						map[string]interface{}{
-							"status":     SwapSuccess,
-							"updated_at": time.Now().Unix(),
-						}).Error
-					if err != nil {
-						util.Logger.Errorf("update table %s failed: %s", model.Swap{}.TableName(), err.Error())
-					}
-				}
-			}
-		}
-	}
-}
-
-func (swapper *Swapper) alertDaemon() {
-	// TODO
 }
 
 func (swapper *Swapper) doSwap(swap *model.Swap) error {
@@ -384,16 +295,12 @@ func (swapper *Swapper) doSwap(swap *model.Swap) error {
 		if err != nil {
 			return err
 		}
-		txData, err := rlp.EncodeToBytes(signedTx)
-		if err != nil {
-			return err
-		}
 		swapTx := &model.SwapTx{
 			Direction:      SwapEth2BSC,
 			DepositTxHash:  swap.DepositTxHash,
 			WithdrawTxHash: signedTx.Hash().String(),
-			TxData:         hexutil.Encode(txData),
-			Status:         model.WithdrawTxSent,
+			GasPrice:       signedTx.GasPrice().String(),
+			Status:         model.WithdrawTxCreated,
 		}
 		err = swapper.insertSwapTxToDB(swapTx)
 		if err != nil {
@@ -402,14 +309,7 @@ func (swapper *Swapper) doSwap(swap *model.Swap) error {
 		err = swapper.BSCClient.SendTransaction(context.Background(), signedTx)
 		if err != nil {
 			util.Logger.Errorf("broadcast tx to BSC error: %s", err.Error())
-			err = swapper.DB.Model(model.SwapTx{}).Where("deposit_tx_hash = ?", swapTx.DepositTxHash).Updates(
-				map[string]interface{}{
-					"status":     model.WithdrawTxCreated,
-					"updated_at": time.Now().Unix(),
-				}).Error
-			if err != nil {
-				util.Logger.Errorf("update table %s failed: %s", model.SwapTx{}.TableName(), err.Error())
-			}
+			return err
 		} else {
 			util.Logger.Infof("Send transaction to BSC, %s/%s", swapper.Config.ChainConfig.BSCExplorerUrl, signedTx.Hash().String())
 		}
@@ -418,16 +318,12 @@ func (swapper *Swapper) doSwap(swap *model.Swap) error {
 		if err != nil {
 			return err
 		}
-		txData, err := rlp.EncodeToBytes(signedTx)
-		if err != nil {
-			return err
-		}
 		swapTx := &model.SwapTx{
 			Direction:      SwapBSC2Eth,
 			DepositTxHash:  swap.DepositTxHash,
+			GasPrice:       signedTx.GasPrice().String(),
 			WithdrawTxHash: signedTx.Hash().String(),
-			TxData:         hexutil.Encode(txData),
-			Status:         model.WithdrawTxSent,
+			Status:         model.WithdrawTxCreated,
 		}
 		err = swapper.insertSwapTxToDB(swapTx)
 		if err != nil {
@@ -436,19 +332,174 @@ func (swapper *Swapper) doSwap(swap *model.Swap) error {
 		err = swapper.ETHClient.SendTransaction(context.Background(), signedTx)
 		if err != nil {
 			util.Logger.Errorf("broadcast tx to ETH error: %s", err.Error())
-			err = swapper.DB.Model(model.SwapTx{}).Where("deposit_tx_hash = ?", swapTx.DepositTxHash).Updates(
-				map[string]interface{}{
-					"status":     model.WithdrawTxCreated,
-					"updated_at": time.Now().Unix(),
-				}).Error
-			if err != nil {
-				util.Logger.Errorf("update table %s failed: %s", model.SwapTx{}.TableName(), err.Error())
-			}
+			return err
 		} else {
 			util.Logger.Infof("Send transaction to ETH, %s/%s", swapper.Config.ChainConfig.ETHExplorerUrl, signedTx.Hash().String())
 		}
 	}
 	return nil
+}
+
+func (swapper *Swapper) monitorUncertainSwapTxDaemon() {
+	for {
+		time.Sleep(SleepTime * time.Second)
+
+		swapTxs := make([]model.SwapTx, BatchSize)
+		swapper.DB.Where("status = ? and track_retry_counter >= ?", model.WithdrawTxCreated, MaxTrackerRetry).Order("id asc").Limit(BatchSize).Find(&swapTxs)
+		if len(swapTxs) > 0 {
+			util.Logger.Infof("%d withdraw tx are missing, retry to handle these swap", len(swapTxs))
+		}
+
+		for _, swapTx := range swapTxs {
+			util.Logger.Errorf("the withdraw tx is missing, retry this swap, deposit hash %s", swapTx.DepositTxHash)
+			//TODO add alert
+			err := swapper.DB.Model(model.Swap{}).Where("deposit_tx_hash = ?", swapTx.DepositTxHash).Updates(
+				map[string]interface{}{
+					"status":     SwapQuoteConfirmed, // SwapQuoteSending -> SwapQuoteConfirmed, retry
+					"updated_at": time.Now().Unix(),
+				}).Error
+			if err != nil {
+				util.Logger.Errorf("update %s table failed: %s", model.Swap{}, err.Error())
+				// TODO Add alert
+			}
+		}
+
+		swapTxs = swapTxs[:0]
+		swapper.DB.Where("status = ? and track_retry_counter < ?", model.WithdrawTxCreated, MaxTrackerRetry).Order("id asc").Limit(BatchSize).Find(&swapTxs)
+		if len(swapTxs) > 0 {
+			util.Logger.Infof("Track uncertain withdraw tx %d", len(swapTxs))
+		}
+
+		for _, swapTx := range swapTxs {
+			var tx *types.Transaction
+			if swapTx.Direction == SwapEth2BSC {
+				tx, _, _ = swapper.BSCClient.TransactionByHash(context.Background(), ethcom.HexToHash(swapTx.WithdrawTxHash))
+			} else {
+				tx, _, _ = swapper.ETHClient.TransactionByHash(context.Background(), ethcom.HexToHash(swapTx.WithdrawTxHash))
+			}
+			if tx != nil {
+				err := swapper.DB.Model(model.SwapTx{}).Where("deposit_tx_hash = ?", swapTx.DepositTxHash).Updates(
+					map[string]interface{}{
+						"status":     model.WithdrawTxSent,
+						"updated_at": time.Now().Unix(),
+					}).Error
+				if err != nil {
+					util.Logger.Errorf("update table %s failed: %s", model.SwapTx{}.TableName(), err.Error())
+				}
+
+				err = swapper.DB.Model(model.Swap{}).Where("deposit_tx_hash = ?", swapTx.DepositTxHash).Updates(
+					map[string]interface{}{
+						"status":     SwapSent,
+						"updated_at": time.Now().Unix(),
+					}).Error
+				if err != nil {
+					util.Logger.Errorf("update %s table failed: %s", model.Swap{}, err.Error())
+					// TODO Add alert
+				}
+			} else {
+				err := swapper.DB.Model(model.SwapTx{}).Where("deposit_tx_hash = ?", swapTx.DepositTxHash).Updates(
+					map[string]interface{}{
+						"track_retry_counter": gorm.Expr("track_retry_counter + 1"),
+						"updated_at":          time.Now().Unix(),
+					}).Error
+				if err != nil {
+					util.Logger.Errorf("update table %s failed: %s", model.SwapTx{}.TableName(), err.Error())
+				}
+			}
+		}
+	}
+}
+
+func (swapper *Swapper) trackSwapTxDaemon() {
+	for {
+		time.Sleep(SleepTime * time.Second)
+
+		swapTxs := make([]model.SwapTx, BatchSize)
+		swapper.DB.Where("status = ?", model.WithdrawTxSent).Order("id asc").Limit(BatchSize).Find(&swapTxs)
+
+		if len(swapTxs) > 0 {
+			util.Logger.Infof("Track %d swap txs", len(swapTxs))
+		}
+
+		for _, swapTx := range swapTxs {
+			gasPrice := big.NewInt(0)
+			gasPrice.SetString(swapTx.GasPrice, 10)
+
+			var client *ethclient.Client
+			if swapTx.Direction == SwapBSC2Eth {
+				client = swapper.ETHClient
+			} else {
+				client = swapper.BSCClient
+			}
+			block, err := client.BlockByNumber(context.Background(), nil)
+			if err != nil {
+				util.Logger.Debugf("ETH, query block failed: %s", err.Error())
+				continue
+			}
+			txRecipient, err := client.TransactionReceipt(context.Background(), ethcom.HexToHash(swapTx.WithdrawTxHash))
+			if err != nil {
+				util.Logger.Debugf("ETH, query tx failed: %s", err.Error())
+				continue
+			}
+
+			if block.Number().Int64() < txRecipient.BlockNumber.Int64()+swapper.Config.ChainConfig.ETHConfirmNum {
+				continue
+			}
+
+			txFee := big.NewInt(1).Mul(gasPrice, big.NewInt(int64(txRecipient.GasUsed))).String()
+			if txRecipient.Status == TxFailedStatus {
+				// TODO Add alert
+				err = swapper.DB.Model(model.SwapTx{}).Where("deposit_tx_hash = ?", swapTx.DepositTxHash).Updates(
+					map[string]interface{}{
+						"status":              model.WithdrawTxFailed,
+						"height":              txRecipient.BlockNumber.Int64(),
+						"consumed_fee_amount": txFee,
+						"updated_at":          time.Now().Unix(),
+					}).Error
+				if err != nil {
+					util.Logger.Errorf("update table %s failed: %s", model.SwapTx{}.TableName(), err.Error())
+					// TODO Add alert
+				}
+				err = swapper.DB.Model(model.Swap{}).Where("deposit_tx_hash = ?", swapTx.DepositTxHash).Updates(
+					map[string]interface{}{
+						"status":     SwapSendFailed,
+						"log":        "withdraw tx is failed",
+						"updated_at": time.Now().Unix(),
+					}).Error
+				if err != nil {
+					util.Logger.Errorf("update table %s failed: %s", model.Swap{}.TableName(), err.Error())
+					// TODO Add alert
+				}
+				continue
+			}
+
+			err = swapper.DB.Model(model.SwapTx{}).Where("deposit_tx_hash = ?", swapTx.DepositTxHash).Updates(
+				map[string]interface{}{
+					"status":              model.WithdrawTxSuccess,
+					"height":              txRecipient.BlockNumber.Int64(),
+					"consumed_fee_amount": txFee,
+					"updated_at":          time.Now().Unix(),
+				}).Error
+			if err != nil {
+				util.Logger.Errorf("update table %s failed: %s", model.SwapTx{}.TableName(), err.Error())
+				// TODO Add alert
+			}
+
+			err = swapper.DB.Model(model.Swap{}).Where("deposit_tx_hash = ?", swapTx.DepositTxHash).Updates(
+				map[string]interface{}{
+					"status":     SwapSuccess,
+					"updated_at": time.Now().Unix(),
+				}).Error
+			if err != nil {
+				util.Logger.Errorf("update table %s failed: %s", model.Swap{}.TableName(), err.Error())
+				// TODO Add alert
+			}
+		}
+	}
+}
+
+func (swapper *Swapper) alertDaemon() {
+	// TODO
 }
 
 func (swapper *Swapper) insertSwapToDB(data *model.Swap) error {
