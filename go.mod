@@ -4,8 +4,9 @@ go 1.14
 
 require (
 	github.com/aws/aws-sdk-go v1.34.21
-	github.com/binance-chain/go-sdk v1.2.5
+	github.com/btcsuite/btcd v0.20.1-beta // indirect
 	github.com/ethereum/go-ethereum v1.9.12
+	github.com/gorilla/mux v1.8.0
 	github.com/hashicorp/go-uuid v1.0.1
 	github.com/jinzhu/gorm v1.9.16
 	github.com/mattn/go-sqlite3 v2.0.1+incompatible // indirect

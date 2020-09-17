@@ -8,6 +8,7 @@ import (
 
 	"github.com/ethereum/go-ethereum"
 	"github.com/ethereum/go-ethereum/accounts/abi"
+	"github.com/ethereum/go-ethereum/accounts/abi/bind"
 	ethcmm "github.com/ethereum/go-ethereum/common"
 	"github.com/ethereum/go-ethereum/core/types"
 	"github.com/ethereum/go-ethereum/ethclient"
@@ -19,7 +20,8 @@ import (
 
 type Executor interface {
 	GetBlockAndTxEvents(height int64) (*common.BlockAndEventLogs, error)
-	GetChainName()string
+	GetChainName() string
+	GetContractDecimals(address ethcmm.Address) (int, error)
 }
 
 type ChainExecutor struct {
@@ -42,7 +44,7 @@ func NewExecutor(chain string, ethClient *ethclient.Client, swapAddr string, con
 		Config:        config,
 		SwapProxyAddr: ethcmm.HexToAddress(swapAddr),
 		SwapProxyAbi:  proxyAbi,
-		Client:       ethClient,
+		Client:        ethClient,
 	}
 }
 
@@ -111,4 +113,13 @@ func (e *ChainExecutor) GetLogs(header *types.Header) ([]interface{}, error) {
 		eventModels = append(eventModels, eventModel)
 	}
 	return eventModels, nil
+}
+
+func (e *ChainExecutor) GetContractDecimals(address ethcmm.Address) (int, error) {
+	instance, err := swapproxy.NewERC20(address, e.Client)
+	if err != nil {
+		return 0, err
+	}
+	decimals, err := instance.Decimals(&bind.CallOpts{})
+	return int(decimals), err
 }

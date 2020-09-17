@@ -4,6 +4,8 @@ import (
 	"flag"
 	"fmt"
 
+	"github.com/binance-chain/bsc-eth-swap/admin"
+
 	"github.com/ethereum/go-ethereum/ethclient"
 	"github.com/jinzhu/gorm"
 	_ "github.com/jinzhu/gorm/dialects/mysql"
@@ -127,6 +129,9 @@ func main() {
 		panic(fmt.Sprintf("create swap service error, err=%s", err.Error()))
 	}
 	swapInstance.Start()
+
+	admin := admin.NewAdmin(config, db, bscExecutor, ethExecutor)
+	go admin.Serve()
 
 	select {}
 }
