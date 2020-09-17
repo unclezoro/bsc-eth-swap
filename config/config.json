@@ -11,7 +11,7 @@
     "bsc_swap_contract_addr": "0x7b1f3B97c89f9A7B85fA96f47B30dE2DbFddFBc9",
 
     "eth_start_height": 1928680,
-    "eth_provider": "https://data-seed-prebsc-1-s1.binance.org:8545",
+    "eth_provider": "https://ropsten.infura.io/v3/16a60635f67b474cb24ce5ee843b96be",
     "eth_confirm_num": 10,
     "eth_chain_id": 97,
     "eth_swap_contract_addr": "0x7b1f3B97c89f9A7B85fA96f47B30dE2DbFddFBc9"

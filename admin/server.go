@@ -195,12 +195,125 @@ func tokenBasicCheck(token *NewTokenRequest) error {
 	return nil
 }
 
+type UpdateTokenRequest struct {
+	Symbol     string `json:"symbol"`
+	LowerBound string `json:"lower_bound"`
+	UpperBound string `json:"upper_bound"`
+
+	BSCKeyAWSSecretName string `json:"bsc_key_aws_secret_name"`
+	BSCSendAddr         string `json:"bsc_sender"`
+
+	ETHKeyAWSSecretName string `json:"eth_key_aws_secret_name"`
+	ETHSendAddr         string `json:"eth_send_addr"`
+}
+
+func (admin *Admin) UpdateTokenHandler(w http.ResponseWriter, r *http.Request) {
+	var updateToken UpdateTokenRequest
+
+	err := json.NewDecoder(r.Body).Decode(&updateToken)
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusBadRequest)
+		return
+	}
+
+	if updateToken.Symbol == "" {
+		http.Error(w, "symbol should not be empty", http.StatusBadRequest)
+		return
+	}
+
+	token := model.Token{}
+	err = admin.DB.Where("symbol = ?", updateToken.Symbol).First(&token).Error
+	if err != nil {
+		http.Error(w, fmt.Sprintf("token %s is not found", updateToken.Symbol), http.StatusBadRequest)
+		return
+	}
+	toUpdate := map[string]interface{}{}
+
+	if updateToken.LowerBound != "" {
+		toUpdate["low_bound"] = updateToken.LowerBound
+	}
+	if updateToken.UpperBound != "" {
+		toUpdate["upper_bound"] = updateToken.UpperBound
+	}
+	if updateToken.BSCKeyAWSSecretName != "" {
+		toUpdate["bsc_key_aws_secret_name"] = updateToken.BSCKeyAWSSecretName
+	}
+	if updateToken.BSCSendAddr != "" {
+		toUpdate["bsc_send_addr"] = updateToken.BSCSendAddr
+	}
+	if updateToken.ETHKeyAWSSecretName != "" {
+		toUpdate["eth_key_aws_secret_name"] = updateToken.ETHKeyAWSSecretName
+	}
+	if updateToken.ETHSendAddr != "" {
+		toUpdate["eth_send_addr"] = updateToken.ETHSendAddr
+	}
+
+	err = admin.DB.Model(model.Token{}).Where("symbol = ?", updateToken.Symbol).Updates(toUpdate).Error
+	if err != nil {
+		http.Error(w, fmt.Sprintf("update status error, err=%s", err.Error()), http.StatusInternalServerError)
+		return
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(http.StatusOK)
+}
+
+func (admin *Admin) UpdateTokenStatusHandler(w http.ResponseWriter, r *http.Request) {
+	params := mux.Vars(r)
+
+	tokenStr := params["symbol"]
+	if tokenStr == "" {
+		http.Error(w, "required parameter 'token' is missing", http.StatusBadRequest)
+		return
+	}
+
+	statusStr := params["status"]
+	if statusStr == "" {
+		http.Error(w, "required parameter 'status' is missing", http.StatusBadRequest)
+		return
+	}
+
+	if statusStr != "true" && statusStr != "false" {
+		http.Error(w, "status should be true or false", http.StatusBadRequest)
+		return
+	}
+
+	token := model.Token{}
+	err := admin.DB.Where("symbol = ?", tokenStr).First(&token).Error
+	if err != nil {
+		http.Error(w, fmt.Sprintf("token %s is not found", tokenStr), http.StatusBadRequest)
+		return
+	}
+
+	statusToUpdate := true
+	if statusStr == "false" {
+		statusToUpdate = false
+	}
+	if token.Available == statusToUpdate {
+		http.Error(w, fmt.Sprintf("token status is %v", statusToUpdate), http.StatusBadRequest)
+		return
+	}
+
+	err = admin.DB.Model(model.Token{}).Where("symbol = ?", tokenStr).Updates(
+		map[string]interface{}{
+			"available": statusToUpdate,
+		}).Error
+	if err != nil {
+		http.Error(w, fmt.Sprintf("update status error, err=%s", err.Error()), http.StatusInternalServerError)
+		return
+	}
+
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(http.StatusOK)
+}
+
 func (admin *Admin) Endpoints(w http.ResponseWriter, r *http.Request) {
 	endpoints := struct {
 		Endpoints []string `json:"endpoints"`
 	}{
 		Endpoints: []string{
 			"/add_token",
+			"/update_token_status/{symbol}/{status}",
+			"/update_token",
 		},
 	}
 
@@ -223,6 +336,8 @@ func (admin *Admin) Serve() {
 
 	router.HandleFunc("/", admin.Endpoints)
 	router.HandleFunc("/add_token", admin.AddToken)
+	router.HandleFunc("/update_token_status/{symbol}/{status}", admin.UpdateTokenStatusHandler)
+	router.HandleFunc("/update_token", admin.UpdateTokenHandler)
 
 	listenAddr := DefaultListenAddr
 	if admin.Config.AdminConfig.ListenAddr != "" {
