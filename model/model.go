@@ -10,10 +10,10 @@ import (
 
 type BlockLog struct {
 	Id         int64
-	Chain      string
-	BlockHash  string
-	ParentHash string
-	Height     int64
+	Chain      string `gorm:"not null;index:block_log_chain"`
+	BlockHash  string `gorm:"not null;index:block_log_block_hash"`
+	ParentHash string `gorm:"not null;index:block_log_parent_hash"`
+	Height     int64  `gorm:"not null;index:block_log_height"`
 	BlockTime  int64
 	CreateTime int64
 }
@@ -86,7 +86,7 @@ type SwapTx struct {
 	GasPrice          string               `gorm:"not null"`
 	ConsumedFeeAmount string
 	Height            int64
-	Status            WithdrawTxStatus     `gorm:"not null"`
+	Status            WithdrawTxStatus `gorm:"not null"`
 	TrackRetryCounter int64
 }
 
@@ -109,7 +109,10 @@ type Swap struct {
 	// The tx hash confirmed deposit
 	DepositTxHash string `gorm:"not null;index:swap_deposit_tx_hash"`
 	// The tx hash confirmed withdraw
-	WithdrawTxHash string
+	WithdrawTxHash string `gorm:"not null;index:swap_withdraw_tx_hash"`
+
+	// The tx hash of refund
+	RefundTxHash string
 
 	// used to log more message about how this swap failed or invalid
 	Log string
@@ -131,6 +134,8 @@ type Token struct {
 	LowBound        string `gorm:"not null"`
 	UpperBound      string `gorm:"not null"`
 
+	IconUrl string
+
 	BSCKeyType          string `gorm:"not null"`
 	BSCKeyAWSRegion     string
 	BSCKeyAWSSecretName string
@@ -149,25 +154,5 @@ func (Token) TableName() string {
 }
 
 func InitTables(db *gorm.DB) {
-	if !db.HasTable(&BlockLog{}) {
-		db.CreateTable(&BlockLog{})
-	}
-
-	if !db.HasTable(&TxEventLog{}) {
-		db.CreateTable(&TxEventLog{})
-	}
-
-	if !db.HasTable(&SwapTx{}) {
-		db.CreateTable(&SwapTx{})
-	}
-
-	if !db.HasTable(&Token{}) {
-		db.CreateTable(&Token{})
-	}
-
-	if !db.HasTable(&Swap{}) {
-		db.CreateTable(&Swap{})
-	}
-
 	db.AutoMigrate(&Token{}, &SwapTx{}, &Swap{}, &TxEventLog{}, &BlockLog{})
 }
