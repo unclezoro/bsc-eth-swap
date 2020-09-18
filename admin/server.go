@@ -214,7 +214,10 @@ func tokenBasicCheck(token *NewTokenRequest) error {
 }
 
 type UpdateTokenRequest struct {
-	Symbol     string `json:"symbol"`
+	Symbol string `json:"symbol"`
+
+	Available bool `json:"available"`
+
 	LowerBound string `json:"lower_bound"`
 	UpperBound string `json:"upper_bound"`
 
@@ -245,7 +248,10 @@ func (admin *Admin) UpdateTokenHandler(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, fmt.Sprintf("token %s is not found", updateToken.Symbol), http.StatusBadRequest)
 		return
 	}
-	toUpdate := map[string]interface{}{}
+
+	toUpdate := map[string]interface{}{
+		"available": updateToken.Available,
+	}
 
 	if updateToken.LowerBound != "" {
 		toUpdate["low_bound"] = updateToken.LowerBound
@@ -268,58 +274,9 @@ func (admin *Admin) UpdateTokenHandler(w http.ResponseWriter, r *http.Request) {
 
 	err = admin.DB.Model(model.Token{}).Where("symbol = ?", updateToken.Symbol).Updates(toUpdate).Error
 	if err != nil {
-		http.Error(w, fmt.Sprintf("update status error, err=%s", err.Error()), http.StatusInternalServerError)
+		http.Error(w, fmt.Sprintf("update token error, err=%s", err.Error()), http.StatusInternalServerError)
 		return
 	}
-	w.Header().Set("Content-Type", "application/json")
-	w.WriteHeader(http.StatusOK)
-}
-
-func (admin *Admin) UpdateTokenStatusHandler(w http.ResponseWriter, r *http.Request) {
-	params := mux.Vars(r)
-
-	tokenStr := params["symbol"]
-	if tokenStr == "" {
-		http.Error(w, "required parameter 'token' is missing", http.StatusBadRequest)
-		return
-	}
-
-	statusStr := params["status"]
-	if statusStr == "" {
-		http.Error(w, "required parameter 'status' is missing", http.StatusBadRequest)
-		return
-	}
-
-	if statusStr != "true" && statusStr != "false" {
-		http.Error(w, "status should be true or false", http.StatusBadRequest)
-		return
-	}
-
-	token := model.Token{}
-	err := admin.DB.Where("symbol = ?", tokenStr).First(&token).Error
-	if err != nil {
-		http.Error(w, fmt.Sprintf("token %s is not found", tokenStr), http.StatusBadRequest)
-		return
-	}
-
-	statusToUpdate := true
-	if statusStr == "false" {
-		statusToUpdate = false
-	}
-	if token.Available == statusToUpdate {
-		http.Error(w, fmt.Sprintf("token status is %v", statusToUpdate), http.StatusBadRequest)
-		return
-	}
-
-	err = admin.DB.Model(model.Token{}).Where("symbol = ?", tokenStr).Updates(
-		map[string]interface{}{
-			"available": statusToUpdate,
-		}).Error
-	if err != nil {
-		http.Error(w, fmt.Sprintf("update status error, err=%s", err.Error()), http.StatusInternalServerError)
-		return
-	}
-
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(http.StatusOK)
 }
@@ -352,10 +309,9 @@ func (admin *Admin) Endpoints(w http.ResponseWriter, r *http.Request) {
 func (admin *Admin) Serve() {
 	router := mux.NewRouter()
 
-	router.HandleFunc("/", admin.Endpoints)
-	router.HandleFunc("/add_token", admin.AddToken)
-	router.HandleFunc("/update_token_status/{symbol}/{status}", admin.UpdateTokenStatusHandler)
-	router.HandleFunc("/update_token", admin.UpdateTokenHandler)
+	router.HandleFunc("/", admin.Endpoints).Methods("GET")
+	router.HandleFunc("/add_token", admin.AddToken).Methods("POST")
+	router.HandleFunc("/update_token", admin.UpdateTokenHandler).Methods("PUT")
 
 	listenAddr := DefaultListenAddr
 	if admin.Config.AdminConfig.ListenAddr != "" {
