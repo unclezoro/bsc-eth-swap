@@ -28,7 +28,7 @@ var (
 )
 
 // ERC20ABI is the input ABI used to generate the binding from.
-const ERC20ABI = "[{\"inputs\":[],\"name\":\"decimals\",\"outputs\":[{\"internalType\":\"uint8\",\"name\":\"\",\"type\":\"uint8\"}],\"stateMutability\":\"view\",\"type\":\"function\"}]"
+const ERC20ABI = "[{\"inputs\":[],\"name\":\"decimals\",\"outputs\":[{\"internalType\":\"uint8\",\"name\":\"\",\"type\":\"uint8\"}],\"stateMutability\":\"view\",\"type\":\"function\"},{\"inputs\":[],\"name\":\"symbol\",\"outputs\":[{\"internalType\":\"string\",\"name\":\"\",\"type\":\"string\"}],\"stateMutability\":\"view\",\"type\":\"function\"}]"
 
 // ERC20 is an auto generated Go binding around an Ethereum contract.
 type ERC20 struct {
@@ -196,4 +196,30 @@ func (_ERC20 *ERC20Session) Decimals() (uint8, error) {
 // Solidity: function decimals() constant returns(uint8)
 func (_ERC20 *ERC20CallerSession) Decimals() (uint8, error) {
 	return _ERC20.Contract.Decimals(&_ERC20.CallOpts)
+}
+
+// Symbol is a free data retrieval call binding the contract method 0x95d89b41.
+//
+// Solidity: function symbol() constant returns(string)
+func (_ERC20 *ERC20Caller) Symbol(opts *bind.CallOpts) (string, error) {
+	var (
+		ret0 = new(string)
+	)
+	out := ret0
+	err := _ERC20.contract.Call(opts, out, "symbol")
+	return *ret0, err
+}
+
+// Symbol is a free data retrieval call binding the contract method 0x95d89b41.
+//
+// Solidity: function symbol() constant returns(string)
+func (_ERC20 *ERC20Session) Symbol() (string, error) {
+	return _ERC20.Contract.Symbol(&_ERC20.CallOpts)
+}
+
+// Symbol is a free data retrieval call binding the contract method 0x95d89b41.
+//
+// Solidity: function symbol() constant returns(string)
+func (_ERC20 *ERC20CallerSession) Symbol() (string, error) {
+	return _ERC20.Contract.Symbol(&_ERC20.CallOpts)
 }

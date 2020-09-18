@@ -76,6 +76,24 @@ func (admin *Admin) AddToken(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	// check symbol
+	bscSymbol, err := admin.BSCExecutor.GetContractSymbol(common.HexToAddress(newToken.BSCContractAddr))
+	if err != nil {
+		http.Error(w, fmt.Sprintf("get bsc symbol error, addr=%s, err=%s", newToken.BSCContractAddr, err.Error()), http.StatusInternalServerError)
+		return
+	}
+
+	ethSymbol, err := admin.ETHExecutor.GetContractSymbol(common.HexToAddress(newToken.ETHContractAddr))
+	if err != nil {
+		http.Error(w, fmt.Sprintf("get eth symbol error, addr=%s, err=%s", newToken.ETHContractAddr, err.Error()), http.StatusInternalServerError)
+		return
+	}
+
+	if bscSymbol != ethSymbol || bscSymbol != newToken.Symbol {
+		http.Error(w, fmt.Sprintf("symbol is wrong, bsc_symbol=%s, eth_symbol=%d", bscSymbol, ethSymbol), http.StatusInternalServerError)
+		return
+	}
+
 	// check decimals
 	bscDecimals, err := admin.BSCExecutor.GetContractDecimals(common.HexToAddress(newToken.BSCContractAddr))
 	if err != nil {

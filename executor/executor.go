@@ -22,6 +22,7 @@ type Executor interface {
 	GetBlockAndTxEvents(height int64) (*common.BlockAndEventLogs, error)
 	GetChainName() string
 	GetContractDecimals(address ethcmm.Address) (int, error)
+	GetContractSymbol(address ethcmm.Address) (string, error)
 }
 
 type ChainExecutor struct {
@@ -122,4 +123,13 @@ func (e *ChainExecutor) GetContractDecimals(address ethcmm.Address) (int, error)
 	}
 	decimals, err := instance.Decimals(&bind.CallOpts{})
 	return int(decimals), err
+}
+
+func (e *ChainExecutor) GetContractSymbol(address ethcmm.Address) (string, error) {
+	instance, err := swapproxy.NewERC20(address, e.Client)
+	if err != nil {
+		return "", err
+	}
+	symbol, err := instance.Symbol(&bind.CallOpts{})
+	return symbol, err
 }

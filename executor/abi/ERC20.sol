@@ -1,5 +1,6 @@
 pragma solidity ^0.6.0;
 
-contract ERC20 {
-    uint8 public constant decimals = 18;
+interface ERC20 {
+    function symbol() external view returns (string memory);
+    function decimals() external view returns (uint8);
 }
