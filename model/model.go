@@ -43,6 +43,7 @@ const (
 	WithdrawTxSent    WithdrawTxStatus = 1
 	WithdrawTxSuccess WithdrawTxStatus = 2
 	WithdrawTxFailed  WithdrawTxStatus = 3
+	WithdrawTxMissing WithdrawTxStatus = 4
 )
 
 type TxEventLog struct {

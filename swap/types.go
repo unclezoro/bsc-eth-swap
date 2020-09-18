@@ -23,9 +23,11 @@ const (
 	SwapEth2BSC common.SwapDirection = "eth_bsc"
 	SwapBSC2Eth common.SwapDirection = "bsc_eth"
 
-	BatchSize       = 10
-	SleepTime       = 6
-	MaxTrackerRetry = 100
+	BatchSize                      = 10
+	TrackSentTxBatchSize           = 200
+	SleepTime                      = 6
+	SleepTimeForMonitorUncertainTx = 10
+	MaxTrackerRetry                = 20
 
 	TxFailedStatus = 0x00
 )

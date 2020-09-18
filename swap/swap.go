@@ -8,7 +8,6 @@ import (
 	"time"
 
 	ethcom "github.com/ethereum/go-ethereum/common"
-	"github.com/ethereum/go-ethereum/core/types"
 	"github.com/ethereum/go-ethereum/ethclient"
 	"github.com/jinzhu/gorm"
 
@@ -20,7 +19,7 @@ import (
 // NewSwapper returns the Swapper instance
 func NewSwapper(db *gorm.DB, cfg *util.Config, bscClient, ethClient *ethclient.Client) (*Swapper, error) {
 	tokens := make([]model.Token, 0)
-	db.Where("available = ?", true).Find(&tokens)
+	db.Find(&tokens)
 
 	tokenInstances, err := buildTokenInstance(tokens)
 	if err != nil {
@@ -79,7 +78,6 @@ func (swapper *Swapper) Start() {
 	go swapper.monitorSwapRequestDaemon()
 	go swapper.confirmSwapRequestDaemon()
 	go swapper.handleSwapDaemon()
-	go swapper.monitorUncertainSwapTxDaemon()
 	go swapper.trackSwapTxDaemon()
 	go swapper.alertDaemon()
 }
@@ -96,12 +94,10 @@ func (swapper *Swapper) monitorSwapRequestDaemon() {
 
 		for _, txEventLog := range txEventLogs {
 			swap := swapper.createSwap(&txEventLog)
-
 			err := swapper.insertSwapToDB(swap)
 			if err != nil {
 				util.Logger.Errorf("failed to persistent swap: %s", err.Error())
-				util.SendTelegramMessage(fmt.Sprintf("failed to persistent swap: %s", err.Error()))
-				continue
+				util.SendTelegramMessage(fmt.Sprintf("Urgent alert: failed to persistent swap: %s", err.Error()))
 			}
 			err = swapper.DB.Model(model.TxEventLog{}).Where("tx_hash = ?", swap.DepositTxHash).Updates(
 				map[string]interface{}{
@@ -110,6 +106,7 @@ func (swapper *Swapper) monitorSwapRequestDaemon() {
 				}).Error
 			if err != nil {
 				util.Logger.Errorf("update %s table failed: %s", model.TxEventLog{}.TableName(), err.Error())
+				util.SendTelegramMessage(fmt.Sprintf("Urgent alert: update %s table failed: %s", model.TxEventLog{}.TableName(), err.Error()))
 			}
 		}
 	}
@@ -197,7 +194,7 @@ func (swapper *Swapper) confirmSwapRequestDaemon() {
 			swapper.DB.Where("deposit_tx_hash = ?", txEventLog.TxHash).First(&swap)
 			if swap.DepositTxHash == "" {
 				util.Logger.Errorf(fmt.Sprintf("unexpected error, can't find swap by deposit hash: %s", txEventLog.TxHash))
-				util.SendTelegramMessage(fmt.Sprintf("unexpected error, can't find swap by deposit hash: %s", txEventLog.TxHash))
+				util.SendTelegramMessage(fmt.Sprintf("Urgent alert: unexpected error, can't find swap by deposit hash: %s", txEventLog.TxHash))
 				continue
 			}
 			if swap.Status == SwapQuoteRejected {
@@ -210,17 +207,18 @@ func (swapper *Swapper) confirmSwapRequestDaemon() {
 					}).Error
 				if err != nil {
 					util.Logger.Errorf("update %s table failed: %s", model.Swap{}.TableName(), err.Error())
-					util.SendTelegramMessage(fmt.Sprintf("update %s table failed: %s", model.Swap{}.TableName(), err.Error()))
+					util.SendTelegramMessage(fmt.Sprintf("Urgent alert: update %s table failed: %s", model.Swap{}.TableName(), err.Error()))
 				}
 			}
 
-			err := swapper.DB.Model(model.TxEventLog{}).Where("tx_hash = ?", swap.DepositTxHash).Updates(
+			err := swapper.DB.Model(model.TxEventLog{}).Where("id = ?", txEventLog.Id).Updates(
 				map[string]interface{}{
 					"phase":       model.AckSwapRequest,
 					"update_time": time.Now().Unix(),
 				}).Error
 			if err != nil {
 				util.Logger.Errorf("update table %s failed: %s", model.TxEventLog{}.TableName(), err.Error())
+				util.SendTelegramMessage(fmt.Sprintf("Urgent alert: update table %s failed: %s", model.TxEventLog{}.TableName(), err.Error()))
 			}
 		}
 	}
@@ -246,22 +244,32 @@ func (swapper *Swapper) handleSwapDaemon() {
 				}).Error
 			if err != nil {
 				util.Logger.Errorf("update %s table failed: %s", model.Swap{}.TableName(), err.Error())
-				util.SendTelegramMessage(fmt.Sprintf("update %s table failed: %s", model.Swap{}.TableName(), err.Error()))
+				util.SendTelegramMessage(fmt.Sprintf("Urgent alert: update %s table failed: %s", model.Swap{}.TableName(), err.Error()))
 			}
 
 			swapTx, err := swapper.doSwap(&swap)
 			if err != nil {
-				util.Logger.Errorf("do swap failure: %s", err.Error())
-				util.SendTelegramMessage(fmt.Sprintf("do swap failure: %s", err.Error()))
+				util.Logger.Errorf("do swap failed: %s, deposit hash %s", err.Error(), swap.DepositTxHash)
+				util.SendTelegramMessage(fmt.Sprintf("Urgent alert: do swap failed: %s, %s", err.Error(), swap.DepositTxHash))
+				err := swapper.DB.Model(model.Swap{}).Where("id = ?", swap.ID).Updates(
+					map[string]interface{}{
+						"status":     SwapSendFailed,
+						"updated_at": time.Now().Unix(),
+					}).Error
+				if err != nil {
+					util.Logger.Errorf("update %s table failed: %s", model.Swap{}.TableName(), err.Error())
+					util.SendTelegramMessage(fmt.Sprintf("Urgent alert: update %s table failed: %s", model.Swap{}.TableName(), err.Error()))
+				}
 				continue
 			}
-			err = swapper.DB.Model(model.SwapTx{}).Where("deposit_tx_hash = ?", swap.DepositTxHash).Updates(
+			err = swapper.DB.Model(model.SwapTx{}).Where("id = ?", swapTx.ID).Updates(
 				map[string]interface{}{
 					"status":     model.WithdrawTxSent,
 					"updated_at": time.Now().Unix(),
 				}).Error
 			if err != nil {
 				util.Logger.Errorf("update table %s failed: %s", model.SwapTx{}.TableName(), err.Error())
+				util.SendTelegramMessage(fmt.Sprintf("Urgent alert: update table %s failed: %s", model.SwapTx{}.TableName(), err.Error()))
 			}
 			err = swapper.DB.Model(model.Swap{}).Where("id = ?", swap.ID).Updates(
 				map[string]interface{}{
@@ -271,7 +279,7 @@ func (swapper *Swapper) handleSwapDaemon() {
 				}).Error
 			if err != nil {
 				util.Logger.Errorf("update %s table failed: %s", model.Swap{}.TableName(), err.Error())
-				util.SendTelegramMessage(fmt.Sprintf("update %s table failed: %s", model.Swap{}.TableName(), err.Error()))
+				util.SendTelegramMessage(fmt.Sprintf("Urgent alert: update %s table failed: %s", model.Swap{}.TableName(), err.Error()))
 			}
 		}
 	}
@@ -342,163 +350,147 @@ func (swapper *Swapper) doSwap(swap *model.Swap) (*model.SwapTx, error) {
 	}
 }
 
-func (swapper *Swapper) monitorUncertainSwapTxDaemon() {
-	for {
-		time.Sleep(SleepTime * time.Second)
+func (swapper *Swapper) trackSwapTxDaemon() {
+	go func() {
+		for {
+			time.Sleep(SleepTime * time.Second)
 
-		swapTxs := make([]model.SwapTx, BatchSize)
-		swapper.DB.Where("status = ? and track_retry_counter >= ?", model.WithdrawTxCreated, MaxTrackerRetry).Order("id asc").Limit(BatchSize).Find(&swapTxs)
-		if len(swapTxs) > 0 {
-			util.Logger.Infof("%d withdraw tx are missing, retry to handle these swap", len(swapTxs))
-		}
-
-		for _, swapTx := range swapTxs {
-			util.Logger.Errorf("the withdraw tx is missing, retry this swap, deposit hash %s", swapTx.DepositTxHash)
-			util.SendTelegramMessage(fmt.Sprintf("the withdraw tx is missing, retry this swap, deposit hash %s", swapTx.DepositTxHash))
-			err := swapper.DB.Model(model.Swap{}).Where("deposit_tx_hash = ?", swapTx.DepositTxHash).Updates(
-				map[string]interface{}{
-					"status":     SwapQuoteConfirmed, // SwapQuoteSending -> SwapQuoteConfirmed, retry
-					"updated_at": time.Now().Unix(),
-				}).Error
-			if err != nil {
-				util.Logger.Errorf("update %s table failed: %s", model.Swap{}.TableName(), err.Error())
-				util.SendTelegramMessage(fmt.Sprintf("update %s table failed: %s", model.Swap{}.TableName(), err.Error()))
+			swapTxs := make([]model.SwapTx, TrackSentTxBatchSize)
+			swapper.DB.Where("status = ? and track_retry_counter >= ?", model.WithdrawTxSent, MaxTrackerRetry).Order("id asc").Limit(TrackSentTxBatchSize).Find(&swapTxs)
+			if len(swapTxs) > 0 {
+				util.Logger.Infof("%d withdraw tx are missing, mark these swaps as failed", len(swapTxs))
 			}
-		}
 
-		swapTxs = swapTxs[:0]
-		swapper.DB.Where("status = ? and track_retry_counter < ?", model.WithdrawTxCreated, MaxTrackerRetry).Order("id asc").Limit(BatchSize).Find(&swapTxs)
-		if len(swapTxs) > 0 {
-			util.Logger.Infof("Track uncertain withdraw tx %d", len(swapTxs))
-		}
+			for _, swapTx := range swapTxs {
+				util.Logger.Errorf("the withdraw tx is sent, however, after %d second its status is still uncertain. Mark tx as missing and mark swap as failed, deposit hash %s", SleepTime*MaxTrackerRetry, swapTx.DepositTxHash)
+				util.SendTelegramMessage(fmt.Sprintf("the withdraw tx is sent, however, after %d second its status is still uncertain. Mark tx as missing and mark swap as failed, deposit hash %s", SleepTime*MaxTrackerRetry, swapTx.DepositTxHash))
 
-		for _, swapTx := range swapTxs {
-			var tx *types.Transaction
-			if swapTx.Direction == SwapEth2BSC {
-				tx, _, _ = swapper.BSCClient.TransactionByHash(context.Background(), ethcom.HexToHash(swapTx.WithdrawTxHash))
-			} else {
-				tx, _, _ = swapper.ETHClient.TransactionByHash(context.Background(), ethcom.HexToHash(swapTx.WithdrawTxHash))
-			}
-			if tx != nil {
-				err := swapper.DB.Model(model.SwapTx{}).Where("deposit_tx_hash = ?", swapTx.DepositTxHash).Updates(
+				err := swapper.DB.Model(model.SwapTx{}).Where("id = ?", swapTx.ID).Updates(
 					map[string]interface{}{
-						"status":     model.WithdrawTxSent,
+						"status":     model.WithdrawTxMissing,
 						"updated_at": time.Now().Unix(),
 					}).Error
 				if err != nil {
 					util.Logger.Errorf("update table %s failed: %s", model.SwapTx{}.TableName(), err.Error())
+					util.SendTelegramMessage(fmt.Sprintf("update table %s failed: %s", model.SwapTx{}.TableName(), err.Error()))
 				}
 
 				err = swapper.DB.Model(model.Swap{}).Where("deposit_tx_hash = ?", swapTx.DepositTxHash).Updates(
 					map[string]interface{}{
-						"status":           SwapSent,
-						"withdraw_tx_hash": swapTx.WithdrawTxHash,
+						"status":           SwapSendFailed,
+						"withdraw_tx_hash": "",
 						"updated_at":       time.Now().Unix(),
 					}).Error
 				if err != nil {
 					util.Logger.Errorf("update %s table failed: %s", model.Swap{}.TableName(), err.Error())
 					util.SendTelegramMessage(fmt.Sprintf("update %s table failed: %s", model.Swap{}.TableName(), err.Error()))
 				}
-			} else {
-				err := swapper.DB.Model(model.SwapTx{}).Where("deposit_tx_hash = ?", swapTx.DepositTxHash).Updates(
-					map[string]interface{}{
-						"track_retry_counter": gorm.Expr("track_retry_counter + 1"),
-						"updated_at":          time.Now().Unix(),
-					}).Error
+			}
+		}
+	}()
+
+	go func() {
+		for {
+			time.Sleep(SleepTime * time.Second)
+
+			swapTxs := make([]model.SwapTx, TrackSentTxBatchSize)
+			swapper.DB.Where("status = ? and track_retry_counter < ?", model.WithdrawTxSent, MaxTrackerRetry).Order("id asc").Limit(TrackSentTxBatchSize).Find(&swapTxs)
+
+			if len(swapTxs) > 0 {
+				util.Logger.Infof("Track %d non-finalized swap txs", len(swapTxs))
+			}
+
+			for _, swapTx := range swapTxs {
+				gasPrice := big.NewInt(0)
+				gasPrice.SetString(swapTx.GasPrice, 10)
+
+				var client *ethclient.Client
+				var chainName string
+				if swapTx.Direction == SwapBSC2Eth {
+					client = swapper.ETHClient
+					chainName = "ETH"
+				} else {
+					client = swapper.BSCClient
+					chainName = "BSC"
+				}
+				err := func() error {
+					block, err := client.BlockByNumber(context.Background(), nil)
+					if err != nil {
+						util.Logger.Debugf("%s, query block failed: %s", chainName,err.Error())
+						return err
+					}
+					txRecipient, err := client.TransactionReceipt(context.Background(), ethcom.HexToHash(swapTx.WithdrawTxHash))
+					if err != nil {
+						util.Logger.Debugf("%s, query tx failed: %s", chainName, err.Error())
+						return err
+					}
+					if block.Number().Int64() < txRecipient.BlockNumber.Int64()+swapper.Config.ChainConfig.ETHConfirmNum {
+						return fmt.Errorf("%s, swap tx is not included into a block", chainName)
+					}
+
+					txFee := big.NewInt(1).Mul(gasPrice, big.NewInt(int64(txRecipient.GasUsed))).String()
+					if txRecipient.Status == TxFailedStatus {
+						util.SendTelegramMessage(fmt.Sprintf("withdraw tx is failed, txHash: %s", txRecipient.TxHash))
+						err = swapper.DB.Model(model.SwapTx{}).Where("id = ?", swapTx.ID).Updates(
+							map[string]interface{}{
+								"status":              model.WithdrawTxFailed,
+								"height":              txRecipient.BlockNumber.Int64(),
+								"consumed_fee_amount": txFee,
+								"updated_at":          time.Now().Unix(),
+							}).Error
+						if err != nil {
+							util.Logger.Errorf("update table %s failed: %s", model.SwapTx{}.TableName(), err.Error())
+							util.SendTelegramMessage(fmt.Sprintf("Urgent alert: update table %s failed: %s", model.SwapTx{}.TableName(), err.Error()))
+						}
+						err = swapper.DB.Model(model.Swap{}).Where("deposit_tx_hash = ?", swapTx.DepositTxHash).Updates(
+							map[string]interface{}{
+								"status":     SwapSendFailed,
+								"log":        "withdraw tx is failed",
+								"updated_at": time.Now().Unix(),
+							}).Error
+						if err != nil {
+							util.Logger.Errorf("update table %s failed: %s", model.Swap{}.TableName(), err.Error())
+							util.SendTelegramMessage(fmt.Sprintf("Urgent alert: update table %s failed: %s", model.Swap{}.TableName(), err.Error()))
+						}
+						return nil
+					}
+					err = swapper.DB.Model(model.SwapTx{}).Where("id = ?", swapTx.ID).Updates(
+						map[string]interface{}{
+							"status":              model.WithdrawTxSuccess,
+							"height":              txRecipient.BlockNumber.Int64(),
+							"consumed_fee_amount": txFee,
+							"updated_at":          time.Now().Unix(),
+						}).Error
+					if err != nil {
+						util.Logger.Errorf("update table %s failed: %s", model.SwapTx{}.TableName(), err.Error())
+						util.SendTelegramMessage(fmt.Sprintf("update table %s failed: %s", model.SwapTx{}.TableName(), err.Error()))
+					}
+					err = swapper.DB.Model(model.Swap{}).Where("deposit_tx_hash = ?", swapTx.DepositTxHash).Updates(
+						map[string]interface{}{
+							"status":     SwapSuccess,
+							"updated_at": time.Now().Unix(),
+						}).Error
+					if err != nil {
+						util.Logger.Errorf("update table %s failed: %s", model.Swap{}.TableName(), err.Error())
+						util.SendTelegramMessage(fmt.Sprintf("update table %s failed: %s", model.Swap{}.TableName(), err.Error()))
+					}
+					return nil
+				}()
 				if err != nil {
-					util.Logger.Errorf("update table %s failed: %s", model.SwapTx{}.TableName(), err.Error())
+					util.Logger.Debugf("track tx error: %s", err.Error())
+					err := swapper.DB.Model(model.SwapTx{}).Where("id = ?", swapTx.ID).Updates(
+						map[string]interface{}{
+							"track_retry_counter": gorm.Expr("track_retry_counter + 1"),
+							"updated_at":          time.Now().Unix(),
+						}).Error
+					if err != nil {
+						util.Logger.Errorf("update table %s failed: %s", model.SwapTx{}.TableName(), err.Error())
+						util.SendTelegramMessage(fmt.Sprintf("update table %s failed: %s", model.SwapTx{}.TableName(), err.Error()))
+					}
 				}
 			}
 		}
-	}
-}
-
-func (swapper *Swapper) trackSwapTxDaemon() {
-	for {
-		time.Sleep(SleepTime * time.Second)
-
-		swapTxs := make([]model.SwapTx, BatchSize)
-		swapper.DB.Where("status = ?", model.WithdrawTxSent).Order("id asc").Limit(BatchSize).Find(&swapTxs)
-
-		if len(swapTxs) > 0 {
-			util.Logger.Infof("Track %d swap txs", len(swapTxs))
-		}
-
-		for _, swapTx := range swapTxs {
-			gasPrice := big.NewInt(0)
-			gasPrice.SetString(swapTx.GasPrice, 10)
-
-			var client *ethclient.Client
-			if swapTx.Direction == SwapBSC2Eth {
-				client = swapper.ETHClient
-			} else {
-				client = swapper.BSCClient
-			}
-			block, err := client.BlockByNumber(context.Background(), nil)
-			if err != nil {
-				util.Logger.Debugf("ETH, query block failed: %s", err.Error())
-				continue
-			}
-			txRecipient, err := client.TransactionReceipt(context.Background(), ethcom.HexToHash(swapTx.WithdrawTxHash))
-			if err != nil {
-				util.Logger.Debugf("ETH, query tx failed: %s", err.Error())
-				continue
-			}
-
-			if block.Number().Int64() < txRecipient.BlockNumber.Int64()+swapper.Config.ChainConfig.ETHConfirmNum {
-				continue
-			}
-
-			txFee := big.NewInt(1).Mul(gasPrice, big.NewInt(int64(txRecipient.GasUsed))).String()
-			if txRecipient.Status == TxFailedStatus {
-				util.SendTelegramMessage(fmt.Sprintf("withdraw tx is failed, txHash: %s", txRecipient.TxHash))
-				err = swapper.DB.Model(model.SwapTx{}).Where("deposit_tx_hash = ?", swapTx.DepositTxHash).Updates(
-					map[string]interface{}{
-						"status":              model.WithdrawTxFailed,
-						"height":              txRecipient.BlockNumber.Int64(),
-						"consumed_fee_amount": txFee,
-						"updated_at":          time.Now().Unix(),
-					}).Error
-				if err != nil {
-					util.Logger.Errorf("update table %s failed: %s", model.SwapTx{}.TableName(), err.Error())
-					util.SendTelegramMessage(fmt.Sprintf("update table %s failed: %s", model.SwapTx{}.TableName(), err.Error()))
-				}
-				err = swapper.DB.Model(model.Swap{}).Where("deposit_tx_hash = ?", swapTx.DepositTxHash).Updates(
-					map[string]interface{}{
-						"status":     SwapSendFailed,
-						"log":        "withdraw tx is failed",
-						"updated_at": time.Now().Unix(),
-					}).Error
-				if err != nil {
-					util.Logger.Errorf("update table %s failed: %s", model.Swap{}.TableName(), err.Error())
-					util.SendTelegramMessage(fmt.Sprintf("update table %s failed: %s", model.Swap{}.TableName(), err.Error()))
-				}
-				continue
-			}
-
-			err = swapper.DB.Model(model.SwapTx{}).Where("deposit_tx_hash = ?", swapTx.DepositTxHash).Updates(
-				map[string]interface{}{
-					"status":              model.WithdrawTxSuccess,
-					"height":              txRecipient.BlockNumber.Int64(),
-					"consumed_fee_amount": txFee,
-					"updated_at":          time.Now().Unix(),
-				}).Error
-			if err != nil {
-				util.Logger.Errorf("update table %s failed: %s", model.SwapTx{}.TableName(), err.Error())
-				util.SendTelegramMessage(fmt.Sprintf("update table %s failed: %s", model.SwapTx{}.TableName(), err.Error()))
-			}
-
-			err = swapper.DB.Model(model.Swap{}).Where("deposit_tx_hash = ?", swapTx.DepositTxHash).Updates(
-				map[string]interface{}{
-					"status":     SwapSuccess,
-					"updated_at": time.Now().Unix(),
-				}).Error
-			if err != nil {
-				util.Logger.Errorf("update table %s failed: %s", model.Swap{}.TableName(), err.Error())
-				util.SendTelegramMessage(fmt.Sprintf("update table %s failed: %s", model.Swap{}.TableName(), err.Error()))
-			}
-		}
-	}
+	}()
 }
 
 func (swapper *Swapper) alertDaemon() {

@@ -96,7 +96,7 @@ func (e *ChainExecutor) GetLogs(header *types.Header) ([]interface{}, error) {
 
 	eventModels := make([]interface{}, 0, len(logs))
 	for _, log := range logs {
-		util.Logger.Infof("get log: %d, %s, %s", log.BlockNumber, log.Topics[0].String(), log.TxHash.String())
+		util.Logger.Debugf("get log: %d, %s, %s", log.BlockNumber, log.Topics[0].String(), log.TxHash.String())
 
 		event, err := ParseTokenTransferEvent(&e.SwapProxyAbi, &log)
 		if err != nil {
