@@ -209,8 +209,8 @@ func (ob *Observer) Alert() {
 		}
 		if curOtherChainBlockLog.Height > 0 {
 			if time.Now().Unix()-curOtherChainBlockLog.CreateTime > ob.Config.AlertConfig.BlockUpdateTimeout {
-				msg := fmt.Sprintf("last block fetched at %s, height=%d",
-					time.Unix(curOtherChainBlockLog.CreateTime, 0).String(), curOtherChainBlockLog.Height)
+				msg := fmt.Sprintf("last block fetched at %s, chain=%s, height=%d",
+					time.Unix(curOtherChainBlockLog.CreateTime, 0).String(), ob.Executor.GetChainName(), curOtherChainBlockLog.Height)
 				util.SendTelegramMessage(msg)
 			}
 		}
