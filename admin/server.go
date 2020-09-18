@@ -138,8 +138,26 @@ func (admin *Admin) AddToken(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	// get token
+	token := model.Token{}
+	err = admin.DB.Where("symbol = ?", tokenModel.Symbol).First(&token).Error
+	if err != nil {
+		http.Error(w, fmt.Sprintf("token %s is not found", tokenModel.Symbol), http.StatusBadRequest)
+		return
+	}
+	jsonBytes, err := json.MarshalIndent(token, "", "  ")
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(http.StatusOK)
+
+	_, err = w.Write(jsonBytes)
+	if err != nil {
+		util.Logger.Errorf("write response error, err=%s", err.Error())
+	}
 }
 
 func tokenBasicCheck(token *NewTokenRequest) error {
@@ -277,8 +295,27 @@ func (admin *Admin) UpdateTokenHandler(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, fmt.Sprintf("update token error, err=%s", err.Error()), http.StatusInternalServerError)
 		return
 	}
+
+	// get token
+	token = model.Token{}
+	err = admin.DB.Where("symbol = ?", updateToken.Symbol).First(&token).Error
+	if err != nil {
+		http.Error(w, fmt.Sprintf("token %s is not found", updateToken.Symbol), http.StatusBadRequest)
+		return
+	}
+	jsonBytes, err := json.MarshalIndent(token, "", "  ")
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(http.StatusOK)
+
+	_, err = w.Write(jsonBytes)
+	if err != nil {
+		util.Logger.Errorf("write response error, err=%s", err.Error())
+	}
 }
 
 func (admin *Admin) Endpoints(w http.ResponseWriter, r *http.Request) {
