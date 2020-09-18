@@ -356,15 +356,28 @@ func (swapper *Swapper) trackSwapTxDaemon() {
 		for {
 			time.Sleep(SleepTime * time.Second)
 
-			swapTxs := make([]model.SwapTx, TrackSentTxBatchSize)
-			swapper.DB.Where("status = ? and track_retry_counter >= ?", model.WithdrawTxSent, MaxTrackerRetry).Order("id asc").Limit(TrackSentTxBatchSize).Find(&swapTxs)
+			ethSwapTxs := make([]model.SwapTx, TrackSentTxBatchSize)
+			swapper.DB.Where("status = ? and direction = ? and track_retry_counter >= ?", model.WithdrawTxSent, SwapBSC2Eth, swapper.Config.ChainConfig.ETHMaxTrackRetry).
+				Order("id asc").Limit(TrackSentTxBatchSize).Find(&ethSwapTxs)
+
+
+			bscSwapTxs := make([]model.SwapTx, TrackSentTxBatchSize)
+			swapper.DB.Where("status = ? and direction = ? and track_retry_counter >= ?", model.WithdrawTxSent, SwapEth2BSC, swapper.Config.ChainConfig.BSCMaxTrackRetry).
+				Order("id asc").Limit(TrackSentTxBatchSize).Find(&bscSwapTxs)
+
+			swapTxs := append(ethSwapTxs, bscSwapTxs...)
+
 			if len(swapTxs) > 0 {
 				util.Logger.Infof("%d withdraw tx are missing, mark these swaps as failed", len(swapTxs))
 			}
 
 			for _, swapTx := range swapTxs {
-				util.Logger.Errorf("the withdraw tx is sent, however, after %d second its status is still uncertain. Mark tx as missing and mark swap as failed, deposit hash %s", SleepTime*MaxTrackerRetry, swapTx.DepositTxHash)
-				util.SendTelegramMessage(fmt.Sprintf("the withdraw tx is sent, however, after %d second its status is still uncertain. Mark tx as missing and mark swap as failed, deposit hash %s", SleepTime*MaxTrackerRetry, swapTx.DepositTxHash))
+				maxRetry := swapper.Config.ChainConfig.ETHMaxTrackRetry
+				if swapTx.Direction == SwapEth2BSC {
+					maxRetry = swapper.Config.ChainConfig.BSCMaxTrackRetry
+				}
+				util.Logger.Errorf("The withdraw tx is sent, however, after %d seconds its status is still uncertain. Mark tx as missing and mark swap as failed, deposit hash %s", SleepTime*maxRetry, swapTx.DepositTxHash)
+				util.SendTelegramMessage(fmt.Sprintf("The withdraw tx is sent, however, after %d seconds its status is still uncertain. Mark tx as missing and mark swap as failed, deposit hash %s", SleepTime*maxRetry, swapTx.DepositTxHash))
 
 				err := swapper.DB.Model(model.SwapTx{}).Where("id = ?", swapTx.ID).Updates(
 					map[string]interface{}{
@@ -379,7 +392,7 @@ func (swapper *Swapper) trackSwapTxDaemon() {
 				err = swapper.DB.Model(model.Swap{}).Where("deposit_tx_hash = ?", swapTx.DepositTxHash).Updates(
 					map[string]interface{}{
 						"status":     SwapSendFailed,
-						"log":        "withdraw tx is failed",
+						"log":        fmt.Sprintf("track withdraw tx for more than %d times, the withdraw tx status is still uncertain", maxRetry),
 						"updated_at": time.Now().Unix(),
 					}).Error
 				if err != nil {
@@ -394,8 +407,16 @@ func (swapper *Swapper) trackSwapTxDaemon() {
 		for {
 			time.Sleep(SleepTime * time.Second)
 
-			swapTxs := make([]model.SwapTx, TrackSentTxBatchSize)
-			swapper.DB.Where("status = ? and track_retry_counter < ?", model.WithdrawTxSent, MaxTrackerRetry).Order("id asc").Limit(TrackSentTxBatchSize).Find(&swapTxs)
+			ethSwapTxs := make([]model.SwapTx, TrackSentTxBatchSize)
+			swapper.DB.Where("status = ? and direction = ? and track_retry_counter < ?", model.WithdrawTxSent, SwapBSC2Eth, swapper.Config.ChainConfig.ETHMaxTrackRetry).
+				Order("id asc").Limit(TrackSentTxBatchSize).Find(&ethSwapTxs)
+
+
+			bscSwapTxs := make([]model.SwapTx, TrackSentTxBatchSize)
+			swapper.DB.Where("status = ? and direction = ? and track_retry_counter < ?", model.WithdrawTxSent, SwapEth2BSC, swapper.Config.ChainConfig.BSCMaxTrackRetry).
+				Order("id asc").Limit(TrackSentTxBatchSize).Find(&bscSwapTxs)
+
+			swapTxs := append(ethSwapTxs, bscSwapTxs...)
 
 			if len(swapTxs) > 0 {
 				util.Logger.Infof("Track %d non-finalized swap txs", len(swapTxs))

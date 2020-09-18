@@ -6,6 +6,7 @@ import (
 	"io/ioutil"
 
 	"github.com/binance-chain/bsc-eth-swap/common"
+	ethcom "github.com/ethereum/go-ethereum/common"
 )
 
 type Config struct {
@@ -56,12 +57,14 @@ type ChainConfig struct {
 	BSCConfirmNum       int64  `json:"bsc_confirm_num"`
 	BSCSwapContractAddr string `json:"bsc_swap_contract_addr"`
 	BSCExplorerUrl      string `json:"bsc_explorer_url"`
+	BSCMaxTrackRetry    int64  `json:"bsc_max_track_retry"`
 
 	ETHStartHeight      int64  `json:"eth_start_height"`
 	ETHProvider         string `json:"eth_provider"`
 	ETHConfirmNum       int64  `json:"eth_confirm_num"`
 	ETHSwapContractAddr string `json:"eth_swap_contract_addr"`
 	ETHExplorerUrl      string `json:"eth_explorer_url"`
+	ETHMaxTrackRetry    int64  `json:"eth_max_track_retry"`
 }
 
 func (cfg ChainConfig) Validate() {
@@ -74,6 +77,12 @@ func (cfg ChainConfig) Validate() {
 	if cfg.BSCConfirmNum <= 0 {
 		panic("bsc_confirm_num should be larger than 0")
 	}
+	if !ethcom.IsHexAddress(cfg.BSCSwapContractAddr) {
+		panic(fmt.Sprintf("invalid bsc_swap_contract_addr: %s", cfg.BSCSwapContractAddr))
+	}
+	if cfg.BSCMaxTrackRetry <= 0 {
+		panic("bsc_max_track_retry should be larger than 0")
+	}
 
 	if cfg.ETHStartHeight < 0 {
 		panic("bsc_start_height should not be less than 0")
@@ -81,8 +90,14 @@ func (cfg ChainConfig) Validate() {
 	if cfg.ETHProvider == "" {
 		panic("bsc_provider should not be empty")
 	}
+	if !ethcom.IsHexAddress(cfg.ETHSwapContractAddr) {
+		panic(fmt.Sprintf("invalid eth_swap_contract_addr: %s", cfg.ETHSwapContractAddr))
+	}
 	if cfg.ETHConfirmNum <= 0 {
 		panic("bsc_confirm_num should be larger than 0")
+	}
+	if cfg.ETHMaxTrackRetry <= 0 {
+		panic("eth_max_track_retry should be larger than 0")
 	}
 }
 
