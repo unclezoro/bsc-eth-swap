@@ -176,7 +176,7 @@ func tokenBasicCheck(token *NewTokenRequest) error {
 	if len(token.Symbol) == 0 || len(token.Symbol) > MaxTokenLength {
 		return fmt.Errorf("symbol length invalid")
 	}
-	if isAlphaNumFunc(token.Symbol) {
+	if !isAlphaNumFunc(token.Symbol) {
 		return fmt.Errorf("symbol contains invalid character")
 	}
 	if len(token.IconUrl) > MaxIconUrlLength {
@@ -274,7 +274,7 @@ func updateCheck(update *UpdateTokenRequest) error {
 	if len(update.Symbol) == 0 || len(update.Symbol) > MaxTokenLength {
 		return fmt.Errorf("symbol length invalid")
 	}
-	if isAlphaNumFunc(update.Symbol) {
+	if !isAlphaNumFunc(update.Symbol) {
 		return fmt.Errorf("symbol contains invalid character")
 	}
 	if update.UpperBound != "" {
