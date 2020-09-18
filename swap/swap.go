@@ -254,6 +254,7 @@ func (swapper *Swapper) handleSwapDaemon() {
 				err := swapper.DB.Model(model.Swap{}).Where("id = ?", swap.ID).Updates(
 					map[string]interface{}{
 						"status":     SwapSendFailed,
+						"log":        fmt.Sprintf("broadcast tx failure: %s", err.Error()),
 						"updated_at": time.Now().Unix(),
 					}).Error
 				if err != nil {
@@ -377,9 +378,9 @@ func (swapper *Swapper) trackSwapTxDaemon() {
 
 				err = swapper.DB.Model(model.Swap{}).Where("deposit_tx_hash = ?", swapTx.DepositTxHash).Updates(
 					map[string]interface{}{
-						"status":           SwapSendFailed,
-						"withdraw_tx_hash": "",
-						"updated_at":       time.Now().Unix(),
+						"status":     SwapSendFailed,
+						"log":        "withdraw tx is failed",
+						"updated_at": time.Now().Unix(),
 					}).Error
 				if err != nil {
 					util.Logger.Errorf("update %s table failed: %s", model.Swap{}.TableName(), err.Error())
@@ -416,7 +417,7 @@ func (swapper *Swapper) trackSwapTxDaemon() {
 				err := func() error {
 					block, err := client.BlockByNumber(context.Background(), nil)
 					if err != nil {
-						util.Logger.Debugf("%s, query block failed: %s", chainName,err.Error())
+						util.Logger.Debugf("%s, query block failed: %s", chainName, err.Error())
 						return err
 					}
 					txRecipient, err := client.TransactionReceipt(context.Background(), ethcom.HexToHash(swapTx.WithdrawTxHash))
