@@ -141,14 +141,14 @@ type Token struct {
 	BSCKeyAWSRegion     string
 	BSCKeyAWSSecretName string
 	BSCPrivateKey       string // won't present in production environment
-	BSCSendAddr         string `gorm:"not null"`
+	BSCSenderAddr       string `gorm:"not null"`
 	BSCERC20Threshold   string `gorm:"not null"`
 
 	ETHKeyType          string `gorm:"not null"`
 	ETHKeyAWSRegion     string
 	ETHKeyAWSSecretName string
 	ETHPrivateKey       string // won't present in production environment
-	ETHSendAddr         string `gorm:"not null"`
+	ETHSenderAddr       string `gorm:"not null"`
 	ETHERC20Threshold   string `gorm:"not null"`
 }
 

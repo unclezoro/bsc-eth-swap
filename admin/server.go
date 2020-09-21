@@ -65,14 +65,12 @@ type NewTokenRequest struct {
 	BSCKeyAWSRegion     string `json:"bsc_key_aws_region"`
 	BSCKeyAWSSecretName string `json:"bsc_key_aws_secret_name"`
 	BSCPrivateKey       string `json:"bsc_private_key"`
-	BSCSendAddr         string `json:"bsc_sender"`
 	BSCERC20Threshold   string `json:"bsc_erc20_threshold"`
 
 	ETHKeyType          string `json:"eth_key_type"`
 	ETHKeyAWSRegion     string `json:"eth_aws_region"`
 	ETHKeyAWSSecretName string `json:"eth_key_aws_secret_name"`
 	ETHPrivateKey       string `json:"eth_private_key"`
-	ETHSendAddr         string `json:"eth_send_addr"`
 	ETHERC20Threshold   string `json:"eth_erc20_threshold"`
 }
 
@@ -152,13 +150,13 @@ func (admin *Admin) AddToken(w http.ResponseWriter, r *http.Request) {
 		BSCKeyAWSRegion:      newToken.BSCKeyAWSRegion,
 		BSCKeyAWSSecretName:  newToken.BSCKeyAWSSecretName,
 		BSCPrivateKey:        newToken.BSCPrivateKey,
-		BSCSendAddr:          strings.ToLower(swap.GetAddress(bscPubKey).String()),
+		BSCSenderAddr:        strings.ToLower(swap.GetAddress(bscPubKey).String()),
 		BSCERC20Threshold:    newToken.BSCERC20Threshold,
 		ETHKeyType:           newToken.ETHKeyType,
 		ETHKeyAWSRegion:      newToken.ETHKeyAWSRegion,
 		ETHKeyAWSSecretName:  newToken.ETHKeyAWSSecretName,
 		ETHPrivateKey:        newToken.ETHPrivateKey,
-		ETHSendAddr:          strings.ToLower(swap.GetAddress(ethPubKey).String()),
+		ETHSenderAddr:        strings.ToLower(swap.GetAddress(ethPubKey).String()),
 		ETHERC20Threshold:    newToken.ETHERC20Threshold,
 		Available:            false,
 	}
@@ -241,12 +239,6 @@ func tokenBasicCheck(token *NewTokenRequest) error {
 	}
 	if !common.IsHexAddress(token.ETHContractAddr) {
 		return fmt.Errorf("eth_contract_addr is wrong")
-	}
-	if !common.IsHexAddress(token.ETHSendAddr) {
-		return fmt.Errorf("eth_sender_addr is wrong")
-	}
-	if !common.IsHexAddress(token.BSCSendAddr) {
-		return fmt.Errorf("bse_sender_addr is wrong")
 	}
 	// check bsc key
 	if token.BSCKeyType != scmn.LocalPrivateKey && token.BSCKeyType != scmn.AWSPrivateKey {
