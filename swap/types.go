@@ -23,9 +23,10 @@ const (
 	SwapEth2BSC common.SwapDirection = "eth_bsc"
 	SwapBSC2Eth common.SwapDirection = "bsc_eth"
 
-	BatchSize                      = 50
-	TrackSentTxBatchSize           = 100
-	SleepTime                      = 10
+	BatchSize            = 50
+	TrackSentTxBatchSize = 100
+	SleepTime            = 10
+	SwapSleepSecond      = 5
 
 	TxFailedStatus = 0x00
 )
@@ -38,14 +39,16 @@ type Swapper struct {
 	BSCClient               *ethclient.Client
 	BSCContractAddrToSymbol map[string]string
 	ETHContractAddrToSymbol map[string]string
+	NewTokenSignal          chan string
 }
 
 type TokenInstance struct {
-	Symbol     string
-	Name       string
-	Decimals   int
-	LowBound   *big.Int
-	UpperBound *big.Int
+	Symbol      string
+	Name        string
+	Decimals    int
+	LowBound    *big.Int
+	UpperBound  *big.Int
+	CloseSignal chan bool
 
 	BSCPrivateKey   *ecdsa.PrivateKey
 	BSCTxSender     ethcom.Address
