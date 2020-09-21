@@ -239,7 +239,8 @@ func (swapper *Swapper) confirmSwapRequestDaemon() {
 func (swapper *Swapper) createSwapDaemon() {
 	// start initial token swap daemon
 	for symbol, tokenInstance := range swapper.TokenInstances {
-		go swapper.swapInstanceDaemon(symbol, tokenInstance)
+		go swapper.swapInstanceDaemon(symbol, SwapEth2BSC, tokenInstance)
+		go swapper.swapInstanceDaemon(symbol, SwapBSC2Eth, tokenInstance)
 	}
 	// start new swap daemon for admin
 	for symbol := range swapper.NewTokenSignal {
@@ -249,24 +250,26 @@ func (swapper *Swapper) createSwapDaemon() {
 			util.Logger.Errorf("Urgent alert: unexpected error, can't find token install for symbol %s", symbol)
 			util.SendTelegramMessage(fmt.Sprintf("Urgent alert: unexpected error, can't find token install for symbol %s", symbol))
 		} else {
-			go swapper.swapInstanceDaemon(symbol, tokenInstance)
+			go swapper.swapInstanceDaemon(symbol, SwapEth2BSC, tokenInstance)
+			go swapper.swapInstanceDaemon(symbol, SwapBSC2Eth, tokenInstance)
 		}
 	}
 	select {}
 }
 
-func (swapper *Swapper) swapInstanceDaemon(symbol string, tokenInstance *TokenInstance) {
+func (swapper *Swapper) swapInstanceDaemon(symbol string, direction common.SwapDirection, tokenInstance *TokenInstance) {
+	util.Logger.Infof("start swap daemon for %s, direction %s", symbol, direction)
 	for {
 		select {
 		case <-tokenInstance.CloseSignal:
-			util.Logger.Infof("close swap daemon for %s", symbol)
-			util.SendTelegramMessage(fmt.Sprintf("close swap daemon for %s", symbol))
+			util.Logger.Infof("close swap daemon for %s, direction %s", symbol, direction)
+			util.SendTelegramMessage(fmt.Sprintf("close swap daemon for %s, direction %s", symbol, direction))
 			return
 		default:
 		}
 
 		swaps := make([]model.Swap, 0)
-		swapper.DB.Where("status = ? and symbol = ?", SwapQuoteConfirmed, symbol).Order("id asc").Limit(BatchSize).Find(&swaps)
+		swapper.DB.Where("status = ? and symbol = ? and direction = ?", SwapQuoteConfirmed, symbol, direction).Order("id asc").Limit(BatchSize).Find(&swaps)
 
 		if len(swaps) == 0 {
 			time.Sleep(SwapSleepSecond * time.Second)
@@ -287,6 +290,7 @@ func (swapper *Swapper) swapInstanceDaemon(symbol string, tokenInstance *TokenIn
 				continue
 			}
 
+			util.Logger.Infof("do swap token %s , direction %s, sponsor: %s, amount %s, decimals %d,", symbol, direction, swap.Sponsor, swap.Amount, swap.Decimals)
 			swapTx, swapErr := swapper.doSwap(&swap, tokenInstance)
 
 			writeDBErr := func() error {
