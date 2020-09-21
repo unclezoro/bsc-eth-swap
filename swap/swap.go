@@ -122,6 +122,9 @@ func (swapper *Swapper) monitorSwapRequestDaemon() {
 }
 
 func (swapper *Swapper) createSwap(txEventLog *model.TxEventLog) *model.Swap {
+	swapper.Mutex.RLock()
+	defer swapper.Mutex.RUnlock()
+
 	sponsor := txEventLog.FromAddress
 	amount := txEventLog.Amount
 	depositTxHash := txEventLog.TxHash
@@ -244,15 +247,20 @@ func (swapper *Swapper) createSwapDaemon() {
 	}
 	// start new swap daemon for admin
 	for symbol := range swapper.NewTokenSignal {
-		util.Logger.Infof("start new swap daemon for %s", symbol)
-		tokenInstance, ok := swapper.TokenInstances[symbol]
-		if !ok {
-			util.Logger.Errorf("Urgent alert: unexpected error, can't find token install for symbol %s", symbol)
-			util.SendTelegramMessage(fmt.Sprintf("Urgent alert: unexpected error, can't find token install for symbol %s", symbol))
-		} else {
-			go swapper.swapInstanceDaemon(symbol, SwapEth2BSC, tokenInstance)
-			go swapper.swapInstanceDaemon(symbol, SwapBSC2Eth, tokenInstance)
-		}
+		func () {
+			swapper.Mutex.RLock()
+			defer swapper.Mutex.RUnlock()
+
+			util.Logger.Infof("start new swap daemon for %s", symbol)
+			tokenInstance, ok := swapper.TokenInstances[symbol]
+			if !ok {
+				util.Logger.Errorf("Urgent alert: unexpected error, can't find token install for symbol %s", symbol)
+				util.SendTelegramMessage(fmt.Sprintf("Urgent alert: unexpected error, can't find token install for symbol %s", symbol))
+			} else {
+				go swapper.swapInstanceDaemon(symbol, SwapEth2BSC, tokenInstance)
+				go swapper.swapInstanceDaemon(symbol, SwapBSC2Eth, tokenInstance)
+			}
+		} ()
 	}
 	select {}
 }
@@ -300,7 +308,7 @@ func (swapper *Swapper) swapInstanceDaemon(symbol string, direction common.SwapD
 				}
 				if swapErr != nil {
 					util.Logger.Errorf("do swap failed: %s, deposit hash %s", swapErr.Error(), swap.DepositTxHash)
-					util.SendTelegramMessage(fmt.Sprintf("Urgent alert: do swap failed: %s, %s", swapErr.Error(), swap.DepositTxHash))
+					util.SendTelegramMessage(fmt.Sprintf("Urgent alert: do swap failed: %s, deposit has %s", swapErr.Error(), swap.DepositTxHash))
 					tx.Model(model.Swap{}).Where("id = ?", swap.ID).Updates(
 						map[string]interface{}{
 							"status":     SwapSendFailed,
@@ -607,10 +615,13 @@ func (swapper *Swapper) AddToken(token *model.Token) error {
 		return fmt.Errorf("invalid upperBound amount: %s", token.LowBound)
 	}
 
+	swapper.Mutex.Lock()
+	defer swapper.Mutex.Unlock()
 	swapper.TokenInstances[token.Symbol] = &TokenInstance{
 		Symbol:          token.Symbol,
 		Name:            token.Name,
 		Decimals:        token.Decimals,
+		CloseSignal:     make(chan bool),
 		LowBound:        lowBound,
 		UpperBound:      upperBound,
 		BSCPrivateKey:   bscPriKey,
@@ -618,11 +629,17 @@ func (swapper *Swapper) AddToken(token *model.Token) error {
 		ETHPrivateKey:   ethPriKey,
 		ETHContractAddr: ethcom.HexToAddress(token.ETHContractAddr),
 	}
+	swapper.BSCContractAddrToSymbol[strings.ToLower(token.BSCContractAddr)] = token.Symbol
+	swapper.ETHContractAddrToSymbol[strings.ToLower(token.ETHContractAddr)] = token.Symbol
+
 	swapper.NewTokenSignal <- token.Symbol
 	return nil
 }
 
 func (swapper *Swapper) RemoveToken(token *model.Token) {
+	swapper.Mutex.Lock()
+	defer swapper.Mutex.Unlock()
+
 	tokenInstance, ok := swapper.TokenInstances[token.Symbol]
 	if !ok {
 		util.Logger.Errorf("unsupported token %s", token.Symbol)

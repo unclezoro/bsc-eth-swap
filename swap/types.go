@@ -3,6 +3,7 @@ package swap
 import (
 	"crypto/ecdsa"
 	"math/big"
+	"sync"
 
 	"github.com/binance-chain/bsc-eth-swap/common"
 	"github.com/binance-chain/bsc-eth-swap/util"
@@ -32,6 +33,7 @@ const (
 )
 
 type Swapper struct {
+	Mutex                   sync.RWMutex
 	DB                      *gorm.DB
 	Config                  *util.Config
 	TokenInstances          map[string]*TokenInstance
