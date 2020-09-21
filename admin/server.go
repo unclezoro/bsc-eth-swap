@@ -103,7 +103,7 @@ func (admin *Admin) AddToken(w http.ResponseWriter, r *http.Request) {
 	}
 
 	if bscSymbol != ethSymbol || bscSymbol != newToken.Symbol {
-		http.Error(w, fmt.Sprintf("symbol is wrong, bsc_symbol=%s, eth_symbol=%d", bscSymbol, ethSymbol), http.StatusBadRequest)
+		http.Error(w, fmt.Sprintf("symbol is wrong, bsc_symbol=%s, eth_symbol=%s", bscSymbol, ethSymbol), http.StatusBadRequest)
 		return
 	}
 
@@ -417,9 +417,9 @@ func (admin *Admin) DeleteTokenHandler(w http.ResponseWriter, r *http.Request) {
 
 	// check ongoing swaps
 	var ongoingSwapCount = 0
-	err = admin.DB.Where("status not in (?)", []scmn.SwapStatus{swap.SwapQuoteRejected, swap.SwapSendFailed, swap.SwapSuccess}).Count(&ongoingSwapCount).Error
+	err = admin.DB.Model(model.Swap{}).Where("status not in (?)", []scmn.SwapStatus{swap.SwapQuoteRejected, swap.SwapSendFailed, swap.SwapSuccess}).Count(&ongoingSwapCount).Error
 	if err != nil {
-		http.Error(w, fmt.Sprintf("find ongoing swaps error"), http.StatusInternalServerError)
+		http.Error(w, fmt.Sprintf("find ongoing swaps error: %s", err.Error()), http.StatusInternalServerError)
 		return
 	}
 	if ongoingSwapCount > 0 {

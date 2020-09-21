@@ -618,6 +618,7 @@ func (swapper *Swapper) AddToken(token *model.Token) error {
 		ETHPrivateKey:   ethPriKey,
 		ETHContractAddr: ethcom.HexToAddress(token.ETHContractAddr),
 	}
+	swapper.NewTokenSignal <- token.Symbol
 	return nil
 }
 
