@@ -478,7 +478,7 @@ func (admin *Admin) Serve() {
 	router.HandleFunc("/healthz", admin.Healthz).Methods("GET")
 	router.HandleFunc("/add_token", admin.AddToken).Methods("POST")
 	router.HandleFunc("/update_token", admin.UpdateTokenHandler).Methods("PUT")
-	router.HandleFunc("/delete_token/{symbol}", admin.UpdateTokenHandler).Methods("DELETE")
+	router.HandleFunc("/delete_token/{symbol}", admin.DeleteTokenHandler).Methods("DELETE")
 
 	listenAddr := DefaultListenAddr
 	if admin.Config.AdminConfig.ListenAddr != "" {
