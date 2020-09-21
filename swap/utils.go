@@ -50,6 +50,7 @@ func buildTokenInstance(tokens []model.Token) (map[string]*TokenInstance, error)
 			Decimals:        token.Decimals,
 			LowBound:        lowBound,
 			UpperBound:      upperBound,
+			CloseSignal:     make(chan bool),
 			BSCPrivateKey:   bscPriKey,
 			BSCContractAddr: ethcom.HexToAddress(token.BSCContractAddr),
 			ETHPrivateKey:   ethPriKey,
