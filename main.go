@@ -130,7 +130,7 @@ func main() {
 	}
 	swapInstance.Start()
 
-	admin := admin.NewAdmin(config, db, bscExecutor, ethExecutor)
+	admin := admin.NewAdmin(config, db, swapInstance, bscExecutor, ethExecutor)
 	go admin.Serve()
 
 	select {}
