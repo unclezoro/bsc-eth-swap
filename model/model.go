@@ -126,14 +126,14 @@ func (Swap) TableName() string {
 type Token struct {
 	gorm.Model
 
-	Symbol          string `gorm:"unique;not null;index:symbol"`
-	Name            string `gorm:"not null"`
-	Decimals        int    `gorm:"not null"`
-	BSCContractAddr string `gorm:"unique;not null"`
-	ETHContractAddr string `gorm:"unique;not null"`
-	Available       bool   `gorm:"not null;index:available"`
-	LowBound        string `gorm:"not null"`
-	UpperBound      string `gorm:"not null"`
+	Symbol               string `gorm:"unique;not null;index:symbol"`
+	Name                 string `gorm:"not null"`
+	Decimals             int    `gorm:"not null"`
+	BSCTokenContractAddr string `gorm:"unique;not null"`
+	ETHTokenContractAddr string `gorm:"unique;not null"`
+	Available            bool   `gorm:"not null;index:available"`
+	LowBound             string `gorm:"not null"`
+	UpperBound           string `gorm:"not null"`
 
 	IconUrl string
 
@@ -142,12 +142,14 @@ type Token struct {
 	BSCKeyAWSSecretName string
 	BSCPrivateKey       string // won't present in production environment
 	BSCSendAddr         string `gorm:"not null"`
+	BSCERC20Threshold   string `gorm:"not null"`
 
 	ETHKeyType          string `gorm:"not null"`
 	ETHKeyAWSRegion     string
 	ETHKeyAWSSecretName string
 	ETHPrivateKey       string // won't present in production environment
 	ETHSendAddr         string `gorm:"not null"`
+	ETHERC20Threshold   string `gorm:"not null"`
 }
 
 func (Token) TableName() string {

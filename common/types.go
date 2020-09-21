@@ -6,7 +6,6 @@ const (
 	ObserverMaxBlockNumber = 10000
 	ObserverPruneInterval  = 10 * time.Second
 	ObserverAlertInterval  = 5 * time.Second
-	ObserverFetchInterval  = 1 * time.Second
 )
 
 const (

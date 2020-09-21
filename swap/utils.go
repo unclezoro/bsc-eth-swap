@@ -24,12 +24,12 @@ import (
 func buildTokenInstance(tokens []model.Token) (map[string]*TokenInstance, error) {
 	tokenPrivateKeys := make(map[string]*TokenInstance, len(tokens))
 	for _, token := range tokens {
-		bscPriKey, err := getBSCPrivateKey(&token)
+		bscPriKey, bscPubKey, err := GetPrivateKey(token.BSCKeyType, token.BSCKeyAWSSecretName, token.BSCKeyAWSRegion, token.BSCPrivateKey)
 		if err != nil {
 			return nil, err
 		}
 
-		ethPriKey, err := getETHPrivateKey(&token)
+		ethPriKey, ethPubKey, err := GetPrivateKey(token.ETHKeyType, token.ETHKeyAWSSecretName, token.ETHKeyAWSRegion, token.ETHPrivateKey)
 		if err != nil {
 			return nil, err
 		}
@@ -44,29 +44,39 @@ func buildTokenInstance(tokens []model.Token) (map[string]*TokenInstance, error)
 			panic(fmt.Sprintf("invalid upperBound amount: %s", token.LowBound))
 		}
 
+		bscERC20Threshold := big.NewInt(0)
+		bscERC20Threshold.SetString(token.BSCERC20Threshold, 10)
+
+		ethERC20Threshold := big.NewInt(0)
+		ethERC20Threshold.SetString(token.ETHERC20Threshold, 10)
+
 		tokenPrivateKeys[token.Symbol] = &TokenInstance{
-			Symbol:          token.Symbol,
-			Name:            token.Name,
-			Decimals:        token.Decimals,
-			LowBound:        lowBound,
-			UpperBound:      upperBound,
-			CloseSignal:     make(chan bool),
-			BSCPrivateKey:   bscPriKey,
-			BSCContractAddr: ethcom.HexToAddress(token.BSCContractAddr),
-			ETHPrivateKey:   ethPriKey,
-			ETHContractAddr: ethcom.HexToAddress(token.ETHContractAddr),
+			Symbol:               token.Symbol,
+			Name:                 token.Name,
+			Decimals:             token.Decimals,
+			LowBound:             lowBound,
+			UpperBound:           upperBound,
+			CloseSignal:          make(chan bool),
+			BSCPrivateKey:        bscPriKey,
+			BSCTokenContractAddr: ethcom.HexToAddress(token.BSCTokenContractAddr),
+			BSCTxSender:          GetAddress(bscPubKey),
+			BSCERC20Threshold:    bscERC20Threshold,
+			ETHPrivateKey:        ethPriKey,
+			ETHTokenContractAddr: ethcom.HexToAddress(token.ETHTokenContractAddr),
+			ETHTxSender:          GetAddress(ethPubKey),
+			ETHERC20Threshold:    ethERC20Threshold,
 		}
 	}
 
 	return tokenPrivateKeys, nil
 }
 
-func getBSCPrivateKey(token *model.Token) (*ecdsa.PrivateKey, error) {
-	var bscPrivateKey string
-	if token.BSCKeyType == common.AWSPrivateKey {
-		result, err := util.GetSecret(token.BSCKeyAWSSecretName, token.BSCKeyAWSRegion)
+func GetPrivateKey(keyType, keyAWSSecretName, keyAWSRegion, privateKey string) (*ecdsa.PrivateKey, *ecdsa.PublicKey, error) {
+	var privateKeyStr string
+	if keyType == common.AWSPrivateKey {
+		result, err := util.GetSecret(keyAWSSecretName, keyAWSRegion)
 		if err != nil {
-			return nil, err
+			return nil, nil, err
 		}
 		type AwsPrivateKey struct {
 			PrivateKey string `json:"private_key"`
@@ -74,37 +84,26 @@ func getBSCPrivateKey(token *model.Token) (*ecdsa.PrivateKey, error) {
 		var awsPrivateKey AwsPrivateKey
 		err = json.Unmarshal([]byte(result), &awsPrivateKey)
 		if err != nil {
-			return nil, err
+			return nil, nil, err
 		}
-		bscPrivateKey = awsPrivateKey.PrivateKey
+		privateKeyStr = awsPrivateKey.PrivateKey
 	} else {
-		bscPrivateKey = token.BSCPrivateKey
+		privateKeyStr = privateKey
 	}
 
-	return crypto.HexToECDSA(bscPrivateKey)
-}
-
-func getETHPrivateKey(token *model.Token) (*ecdsa.PrivateKey, error) {
-	var ethPrivateKey string
-	if token.ETHKeyType == common.AWSPrivateKey {
-		result, err := util.GetSecret(token.ETHKeyAWSSecretName, token.ETHKeyAWSRegion)
-		if err != nil {
-			return nil, err
-		}
-		type AwsPrivateKey struct {
-			PrivateKey string `json:"private_key"`
-		}
-		var awsPrivateKey AwsPrivateKey
-		err = json.Unmarshal([]byte(result), &awsPrivateKey)
-		if err != nil {
-			return nil, err
-		}
-		ethPrivateKey = awsPrivateKey.PrivateKey
-	} else {
-		ethPrivateKey = token.ETHPrivateKey
+	if strings.HasPrefix(privateKeyStr, "0x") {
+		privateKeyStr = privateKeyStr[2:]
 	}
 
-	return crypto.HexToECDSA(ethPrivateKey)
+	priKey, err := crypto.HexToECDSA(privateKeyStr)
+	if err != nil {
+		return nil, nil, err
+	}
+	publicKeyECDSA, ok := priKey.Public().(*ecdsa.PublicKey)
+	if !ok {
+		return nil, nil, fmt.Errorf("get public key error")
+	}
+	return priKey, publicKeyECDSA, nil
 }
 
 func abiEncodeTransfer(recipient ethcom.Address, amount *big.Int) ([]byte, error) {
@@ -153,24 +152,14 @@ func generateTxOpt(privateKey *ecdsa.PrivateKey) *bind.TransactOpts {
 	return txOpts
 }
 
-func getCallOpts() (*bind.CallOpts, error) {
+func getCallOpts() *bind.CallOpts {
 	callOpts := &bind.CallOpts{
 		Pending: true,
 		Context: context.Background(),
 	}
-	return callOpts, nil
+	return callOpts
 }
 
-func getAddress(privateKey string) (ethcom.Address, error) {
-	privKey, err := crypto.HexToECDSA(privateKey)
-	if err != nil {
-		return ethcom.Address{}, err
-	}
-	publicKey := privKey.Public()
-	publicKeyECDSA, ok := publicKey.(*ecdsa.PublicKey)
-	if !ok {
-		return ethcom.Address{}, fmt.Errorf("get public key error")
-	}
-	return crypto.PubkeyToAddress(*publicKeyECDSA), nil
+func GetAddress(pubKey *ecdsa.PublicKey) ethcom.Address {
+	return crypto.PubkeyToAddress(*pubKey)
 }
-

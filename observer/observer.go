@@ -42,13 +42,22 @@ func (ob *Observer) Start() {
 	go ob.Alert()
 }
 
+func (ob *Observer) fetchSleep() {
+	if ob.Executor.GetChainName() == common.ChainBSC {
+		time.Sleep(time.Duration(ob.Config.ChainConfig.BSCObserverFetchInterval) * time.Second)
+	} else {
+		time.Sleep(time.Duration(ob.Config.ChainConfig.ETHObserverFetchInterval) * time.Second)
+	}
+
+}
+
 // Fetch starts the main routine for fetching blocks of BSC
 func (ob *Observer) Fetch(startHeight int64) {
 	for {
 		curBlockLog, err := ob.GetCurrentBlockLog()
 		if err != nil {
 			util.Logger.Errorf("get current block log from DB error: %s", err.Error())
-			time.Sleep(common.ObserverFetchInterval)
+			ob.fetchSleep()
 			continue
 		}
 
@@ -61,7 +70,7 @@ func (ob *Observer) Fetch(startHeight int64) {
 		err = ob.fetchBlock(curBlockLog.Height, nextHeight, curBlockLog.BlockHash)
 		if err != nil {
 			util.Logger.Debugf("fetch %s block error, err=%s", ob.Executor.GetChainName(), err.Error())
-			time.Sleep(common.ObserverFetchInterval)
+			ob.fetchSleep()
 		}
 	}
 }

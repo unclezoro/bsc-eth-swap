@@ -66,12 +66,14 @@ type NewTokenRequest struct {
 	BSCKeyAWSSecretName string `json:"bsc_key_aws_secret_name"`
 	BSCPrivateKey       string `json:"bsc_private_key"`
 	BSCSendAddr         string `json:"bsc_sender"`
+	BSCERC20Threshold   string `json:"bsc_erc20_threshold"`
 
 	ETHKeyType          string `json:"eth_key_type"`
 	ETHKeyAWSRegion     string `json:"eth_aws_region"`
 	ETHKeyAWSSecretName string `json:"eth_key_aws_secret_name"`
 	ETHPrivateKey       string `json:"eth_private_key"`
 	ETHSendAddr         string `json:"eth_send_addr"`
+	ETHERC20Threshold   string `json:"eth_erc20_threshold"`
 }
 
 func (admin *Admin) AddToken(w http.ResponseWriter, r *http.Request) {
@@ -125,26 +127,40 @@ func (admin *Admin) AddToken(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	bscPriKey, bscPubKey, err := swap.GetPrivateKey(newToken.BSCKeyType, newToken.BSCKeyAWSSecretName, newToken.BSCKeyAWSRegion, newToken.BSCPrivateKey)
+	if err != nil {
+		http.Error(w, fmt.Sprintf("failed to get bsc private key: %s", err.Error()), http.StatusBadRequest)
+		return
+	}
+
+	ethPriKey, ethPubKey, err := swap.GetPrivateKey(newToken.ETHKeyType, newToken.ETHKeyAWSSecretName, newToken.ETHKeyAWSRegion, newToken.ETHPrivateKey)
+	if err != nil {
+		http.Error(w, fmt.Sprintf("failed to get eth private key: %s", err.Error()), http.StatusBadRequest)
+		return
+	}
+
 	tokenModel := model.Token{
-		Symbol:              newToken.Symbol,
-		Name:                newToken.Name,
-		Decimals:            newToken.Decimals,
-		BSCContractAddr:     strings.ToLower(common.HexToAddress(newToken.BSCContractAddr).String()),
-		ETHContractAddr:     strings.ToLower(common.HexToAddress(newToken.ETHContractAddr).String()),
-		LowBound:            newToken.LowerBound,
-		UpperBound:          newToken.UpperBound,
-		IconUrl:             newToken.IconUrl,
-		BSCKeyType:          newToken.BSCKeyType,
-		BSCKeyAWSRegion:     newToken.BSCKeyAWSRegion,
-		BSCKeyAWSSecretName: newToken.BSCKeyAWSSecretName,
-		BSCPrivateKey:       newToken.BSCPrivateKey,
-		BSCSendAddr:         strings.ToLower(common.HexToAddress(newToken.BSCSendAddr).String()),
-		ETHKeyType:          newToken.ETHKeyType,
-		ETHKeyAWSRegion:     newToken.ETHKeyAWSRegion,
-		ETHKeyAWSSecretName: newToken.ETHKeyAWSSecretName,
-		ETHPrivateKey:       newToken.ETHPrivateKey,
-		ETHSendAddr:         strings.ToLower(common.HexToAddress(newToken.ETHSendAddr).String()),
-		Available:           false,
+		Symbol:               newToken.Symbol,
+		Name:                 newToken.Name,
+		Decimals:             newToken.Decimals,
+		BSCTokenContractAddr: strings.ToLower(common.HexToAddress(newToken.BSCContractAddr).String()),
+		ETHTokenContractAddr: strings.ToLower(common.HexToAddress(newToken.ETHContractAddr).String()),
+		LowBound:             newToken.LowerBound,
+		UpperBound:           newToken.UpperBound,
+		IconUrl:              newToken.IconUrl,
+		BSCKeyType:           newToken.BSCKeyType,
+		BSCKeyAWSRegion:      newToken.BSCKeyAWSRegion,
+		BSCKeyAWSSecretName:  newToken.BSCKeyAWSSecretName,
+		BSCPrivateKey:        newToken.BSCPrivateKey,
+		BSCSendAddr:          strings.ToLower(swap.GetAddress(bscPubKey).String()),
+		BSCERC20Threshold:    newToken.BSCERC20Threshold,
+		ETHKeyType:           newToken.ETHKeyType,
+		ETHKeyAWSRegion:      newToken.ETHKeyAWSRegion,
+		ETHKeyAWSSecretName:  newToken.ETHKeyAWSSecretName,
+		ETHPrivateKey:        newToken.ETHPrivateKey,
+		ETHSendAddr:          strings.ToLower(swap.GetAddress(ethPubKey).String()),
+		ETHERC20Threshold:    newToken.ETHERC20Threshold,
+		Available:            false,
 	}
 
 	err = admin.DB.Create(&tokenModel).Error
@@ -162,7 +178,7 @@ func (admin *Admin) AddToken(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// add token in swapper
-	err = admin.Swapper.AddToken(&token)
+	err = admin.Swapper.AddToken(&token, bscPriKey, bscPubKey, ethPriKey, ethPubKey)
 	if err != nil {
 		dbErr := admin.DB.Where("symbol = ?", tokenModel.Symbol).Unscoped().Delete(&model.Token{}).Error
 		if dbErr != nil {

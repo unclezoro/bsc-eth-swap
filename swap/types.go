@@ -29,6 +29,8 @@ const (
 	SleepTime            = 10
 	SwapSleepSecond      = 5
 
+	BalanceMonitorInterval = 30
+
 	TxFailedStatus = 0x00
 )
 
@@ -52,10 +54,12 @@ type TokenInstance struct {
 	UpperBound  *big.Int
 	CloseSignal chan bool
 
-	BSCPrivateKey   *ecdsa.PrivateKey
-	BSCTxSender     ethcom.Address
-	BSCContractAddr ethcom.Address
-	ETHPrivateKey   *ecdsa.PrivateKey
-	ETHContractAddr ethcom.Address
-	ETHTxSender     ethcom.Address
+	BSCPrivateKey        *ecdsa.PrivateKey
+	BSCTxSender          ethcom.Address
+	BSCTokenContractAddr ethcom.Address
+	BSCERC20Threshold    *big.Int
+	ETHPrivateKey        *ecdsa.PrivateKey
+	ETHTokenContractAddr ethcom.Address
+	ETHTxSender          ethcom.Address
+	ETHERC20Threshold    *big.Int
 }
