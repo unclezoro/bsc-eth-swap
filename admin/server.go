@@ -9,14 +9,14 @@ import (
 	"strings"
 	"time"
 
+	"github.com/ethereum/go-ethereum/common"
 	"github.com/gorilla/mux"
 	"github.com/jinzhu/gorm"
-
-	"github.com/ethereum/go-ethereum/common"
 
 	scmn "github.com/binance-chain/bsc-eth-swap/common"
 	"github.com/binance-chain/bsc-eth-swap/executor"
 	"github.com/binance-chain/bsc-eth-swap/model"
+	"github.com/binance-chain/bsc-eth-swap/swap"
 	"github.com/binance-chain/bsc-eth-swap/util"
 )
 
@@ -34,14 +34,17 @@ type Admin struct {
 
 	Config *util.Config
 
+	Swapper *swap.Swapper
+
 	BSCExecutor executor.Executor
 	ETHExecutor executor.Executor
 }
 
-func NewAdmin(config *util.Config, db *gorm.DB, bscExecutor executor.Executor, ethExecutor executor.Executor) *Admin {
+func NewAdmin(config *util.Config, db *gorm.DB, swapper *swap.Swapper, bscExecutor executor.Executor, ethExecutor executor.Executor) *Admin {
 	return &Admin{
 		DB:          db,
 		Config:      config,
+		Swapper:     swapper,
 		BSCExecutor: bscExecutor,
 		ETHExecutor: ethExecutor,
 	}
@@ -99,7 +102,7 @@ func (admin *Admin) AddToken(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	if bscSymbol != newToken.Symbol || bscSymbol != newToken.Symbol {
+	if bscSymbol != ethSymbol || bscSymbol != newToken.Symbol {
 		http.Error(w, fmt.Sprintf("symbol is wrong, bsc_symbol=%s, eth_symbol=%d", bscSymbol, ethSymbol), http.StatusBadRequest)
 		return
 	}
@@ -117,7 +120,7 @@ func (admin *Admin) AddToken(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	if bscDecimals != newToken.Decimals || bscDecimals != newToken.Decimals {
+	if bscDecimals != ethDecimals || bscDecimals != newToken.Decimals {
 		http.Error(w, fmt.Sprintf("decimals is wrong, bsc_decimals=%d, eth_decimals=%d", bscDecimals, ethDecimals), http.StatusBadRequest)
 		return
 	}
@@ -157,6 +160,14 @@ func (admin *Admin) AddToken(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, fmt.Sprintf("token %s is not found", tokenModel.Symbol), http.StatusBadRequest)
 		return
 	}
+
+	// add token in swapper
+	err = admin.Swapper.AddToken(&token)
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+
 	jsonBytes, err := json.MarshalIndent(token, "", "  ")
 	if err != nil {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
@@ -338,13 +349,13 @@ func (admin *Admin) UpdateTokenHandler(w http.ResponseWriter, r *http.Request) {
 		toUpdate["bsc_key_aws_secret_name"] = updateToken.BSCKeyAWSSecretName
 	}
 	if updateToken.BSCSendAddr != "" {
-		toUpdate["bsc_send_addr"] =  strings.ToLower(common.HexToAddress(updateToken.BSCSendAddr).String())
+		toUpdate["bsc_send_addr"] = strings.ToLower(common.HexToAddress(updateToken.BSCSendAddr).String())
 	}
 	if updateToken.ETHKeyAWSSecretName != "" {
 		toUpdate["eth_key_aws_secret_name"] = updateToken.ETHKeyAWSSecretName
 	}
 	if updateToken.ETHSendAddr != "" {
-		toUpdate["eth_send_addr"] =  strings.ToLower(common.HexToAddress(updateToken.ETHSendAddr).String())
+		toUpdate["eth_send_addr"] = strings.ToLower(common.HexToAddress(updateToken.ETHSendAddr).String())
 	}
 	if updateToken.IconUrl != "" {
 		toUpdate["icon_url"] = updateToken.IconUrl
@@ -378,6 +389,58 @@ func (admin *Admin) UpdateTokenHandler(w http.ResponseWriter, r *http.Request) {
 	}
 }
 
+func (admin *Admin) DeleteTokenHandler(w http.ResponseWriter, r *http.Request) {
+	params := mux.Vars(r)
+
+	symbol := params["symbol"]
+	if symbol == "" {
+		http.Error(w, "required parameter 'symbol' is missing", http.StatusBadRequest)
+		return
+	}
+
+	// check symbol
+	if len(symbol) == 0 || len(symbol) > MaxTokenLength {
+		http.Error(w, "symbol length invalid", http.StatusBadRequest)
+		return
+	}
+	if !isAlphaNumFunc(symbol) {
+		http.Error(w, "symbol contains invalid character", http.StatusBadRequest)
+		return
+	}
+
+	token := model.Token{}
+	err := admin.DB.Where("symbol = ?", symbol).First(&token).Error
+	if err != nil {
+		http.Error(w, fmt.Sprintf("token %s is not found", symbol), http.StatusBadRequest)
+		return
+	}
+
+	// check ongoing swaps
+	var ongoingSwapCount = 0
+	err = admin.DB.Where("status not in (?)", []scmn.SwapStatus{swap.SwapQuoteRejected, swap.SwapSendFailed, swap.SwapSuccess}).Count(&ongoingSwapCount).Error
+	if err != nil {
+		http.Error(w, fmt.Sprintf("find ongoing swaps error"), http.StatusInternalServerError)
+		return
+	}
+	if ongoingSwapCount > 0 {
+		http.Error(w, fmt.Sprintf("there are onging swaps, can not delete token"), http.StatusBadRequest)
+		return
+	}
+
+	// delete token
+	err = admin.DB.Where("symbol = ?", symbol).Unscoped().Delete(&model.Token{}).Error
+	if err != nil {
+		http.Error(w, fmt.Sprintf("delete token error, err=%s", err.Error()), http.StatusInternalServerError)
+		return
+	}
+
+	// remove token in swapper
+	admin.Swapper.RemoveToken(&token)
+
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(http.StatusOK)
+}
+
 func (admin *Admin) Endpoints(w http.ResponseWriter, r *http.Request) {
 	endpoints := struct {
 		Endpoints []string `json:"endpoints"`
@@ -385,6 +448,7 @@ func (admin *Admin) Endpoints(w http.ResponseWriter, r *http.Request) {
 		Endpoints: []string{
 			"/add_token",
 			"/update_token",
+			"/delete_token/{symbol}",
 			"/healthz",
 		},
 	}
@@ -414,6 +478,7 @@ func (admin *Admin) Serve() {
 	router.HandleFunc("/healthz", admin.Healthz).Methods("GET")
 	router.HandleFunc("/add_token", admin.AddToken).Methods("POST")
 	router.HandleFunc("/update_token", admin.UpdateTokenHandler).Methods("PUT")
+	router.HandleFunc("/delete_token/{symbol}", admin.UpdateTokenHandler).Methods("DELETE")
 
 	listenAddr := DefaultListenAddr
 	if admin.Config.AdminConfig.ListenAddr != "" {
