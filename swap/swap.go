@@ -299,8 +299,8 @@ func (swapper *Swapper) swapInstanceDaemon(symbol string, direction common.SwapD
 					return err
 				}
 				if swapErr != nil {
-					util.Logger.Errorf("do swap failed: %s, deposit hash %s", err.Error(), swap.DepositTxHash)
-					util.SendTelegramMessage(fmt.Sprintf("Urgent alert: do swap failed: %s, %s", err.Error(), swap.DepositTxHash))
+					util.Logger.Errorf("do swap failed: %s, deposit hash %s", swapErr.Error(), swap.DepositTxHash)
+					util.SendTelegramMessage(fmt.Sprintf("Urgent alert: do swap failed: %s, %s", swapErr.Error(), swap.DepositTxHash))
 					tx.Model(model.Swap{}).Where("id = ?", swap.ID).Updates(
 						map[string]interface{}{
 							"status":     SwapSendFailed,
