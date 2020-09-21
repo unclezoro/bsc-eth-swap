@@ -164,6 +164,11 @@ func (admin *Admin) AddToken(w http.ResponseWriter, r *http.Request) {
 	// add token in swapper
 	err = admin.Swapper.AddToken(&token)
 	if err != nil {
+		dbErr := admin.DB.Where("symbol = ?", tokenModel.Symbol).Unscoped().Delete(&model.Token{}).Error
+		if dbErr != nil {
+			http.Error(w, fmt.Sprintf("delete token error, err=%s", dbErr.Error()), http.StatusInternalServerError)
+			return
+		}
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
 	}
