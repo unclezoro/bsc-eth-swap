@@ -8,10 +8,6 @@ import (
 	"math/big"
 	"strings"
 
-	"github.com/binance-chain/bsc-eth-swap/common"
-	"github.com/binance-chain/bsc-eth-swap/model"
-	"github.com/binance-chain/bsc-eth-swap/swap/erc20"
-	"github.com/binance-chain/bsc-eth-swap/util"
 	"github.com/ethereum/go-ethereum"
 	"github.com/ethereum/go-ethereum/accounts/abi"
 	"github.com/ethereum/go-ethereum/accounts/abi/bind"
@@ -19,6 +15,11 @@ import (
 	"github.com/ethereum/go-ethereum/core/types"
 	"github.com/ethereum/go-ethereum/crypto"
 	"github.com/ethereum/go-ethereum/ethclient"
+
+	"github.com/binance-chain/bsc-eth-swap/common"
+	"github.com/binance-chain/bsc-eth-swap/model"
+	"github.com/binance-chain/bsc-eth-swap/swap/erc20"
+	"github.com/binance-chain/bsc-eth-swap/util"
 )
 
 func buildTokenInstance(tokens []model.Token, cfg *util.Config) (map[string]*TokenInstance, error) {
@@ -74,6 +75,24 @@ func buildTokenInstance(tokens []model.Token, cfg *util.Config) (map[string]*Tok
 	return tokenInstances, nil
 }
 
+func GetHMACKey(cfg *util.Config) (string, error) {
+	if cfg.KeyManagerConfig.KeyType == common.AWSPrivateKey {
+		result, err := util.GetSecret(cfg.KeyManagerConfig.AWSSecretName, cfg.KeyManagerConfig.AWSRegion)
+		if err != nil {
+			return "", err
+		}
+
+		keyConfig := util.KeyConfig{}
+		err = json.Unmarshal([]byte(result), &keyConfig)
+		if err != nil {
+			return "", err
+		}
+		return keyConfig.HMACKey, nil
+	} else {
+		return cfg.KeyManagerConfig.LocalHMACKey, nil
+	}
+}
+
 func GetAllTokenKeys(cfg *util.Config) (map[string]*TokenKey, error) {
 	var tokenSecretKeys []util.TokenSecretKey
 	if cfg.KeyManagerConfig.KeyType == common.AWSPrivateKey {
@@ -81,10 +100,12 @@ func GetAllTokenKeys(cfg *util.Config) (map[string]*TokenKey, error) {
 		if err != nil {
 			return nil, err
 		}
-		err = json.Unmarshal([]byte(result), &tokenSecretKeys)
+		keyConfig := util.KeyConfig{}
+		err = json.Unmarshal([]byte(result), &keyConfig)
 		if err != nil {
 			return nil, err
 		}
+		tokenSecretKeys = keyConfig.TokenKeys
 	} else {
 		tokenSecretKeys = cfg.KeyManagerConfig.LocalKeys
 	}

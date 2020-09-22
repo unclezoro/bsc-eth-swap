@@ -38,9 +38,15 @@ func NewSwapper(db *gorm.DB, cfg *util.Config, bscClient, ethClient *ethclient.C
 		ethContractAddrToSymbol[token.ETHTokenContractAddr] = token.Symbol
 	}
 
+	hmacKey, err := GetHMACKey(cfg)
+	if err != nil {
+		return nil, err
+
+	}
 	swapper := &Swapper{
 		DB:                      db,
 		Config:                  cfg,
+		HMACKey:                 hmacKey,
 		BSCClient:               bscClient,
 		ETHClient:               ethClient,
 		TokenInstances:          tokenInstances,
