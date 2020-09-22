@@ -5,11 +5,12 @@ import (
 	"math/big"
 	"sync"
 
-	"github.com/binance-chain/bsc-eth-swap/common"
-	"github.com/binance-chain/bsc-eth-swap/util"
 	ethcom "github.com/ethereum/go-ethereum/common"
 	"github.com/ethereum/go-ethereum/ethclient"
 	"github.com/jinzhu/gorm"
+
+	"github.com/binance-chain/bsc-eth-swap/common"
+	"github.com/binance-chain/bsc-eth-swap/util"
 )
 
 const (
@@ -37,6 +38,7 @@ const (
 type Swapper struct {
 	Mutex                   sync.RWMutex
 	DB                      *gorm.DB
+	HMACKey                 string
 	Config                  *util.Config
 	TokenInstances          map[string]*TokenInstance
 	ETHClient               *ethclient.Client

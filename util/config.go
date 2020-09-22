@@ -5,8 +5,9 @@ import (
 	"fmt"
 	"io/ioutil"
 
-	"github.com/binance-chain/bsc-eth-swap/common"
 	ethcom "github.com/ethereum/go-ethereum/common"
+
+	"github.com/binance-chain/bsc-eth-swap/common"
 )
 
 type Config struct {
