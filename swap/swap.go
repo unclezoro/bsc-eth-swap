@@ -222,7 +222,7 @@ func (swapper *Swapper) confirmSwapRequestDaemon() {
 					return err
 				}
 				if swap.Status == SwapTokenReceived {
-					swap.Status = SwapTokenReceived
+					swap.Status = SwapQuoteConfirmed
 					swapper.updateSwap(tx, &swap)
 				}
 
