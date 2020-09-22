@@ -189,12 +189,6 @@ func (swapper *Swapper) confirmSwapRequestDaemon() {
 				if err := tx.Error; err != nil {
 					return err
 				}
-				tx.Model(model.TxEventLog{}).Where("id = ?", txEventLog.Id).Updates(
-					map[string]interface{}{
-						"phase":       model.AckSwapRequest,
-						"update_time": time.Now().Unix(),
-					})
-
 				if swap.Status == SwapTokenReceived {
 					tx.Model(model.Swap{}).Where("deposit_tx_hash = ?", txEventLog.TxHash).Updates(
 						map[string]interface{}{
@@ -202,6 +196,11 @@ func (swapper *Swapper) confirmSwapRequestDaemon() {
 							"updated_at": time.Now().Unix(),
 						})
 				}
+				tx.Model(model.TxEventLog{}).Where("id = ?", txEventLog.Id).Updates(
+					map[string]interface{}{
+						"phase":       model.AckSwapRequest,
+						"update_time": time.Now().Unix(),
+					})
 				return tx.Commit().Error
 			}()
 
@@ -251,7 +250,7 @@ func (swapper *Swapper) swapInstanceDaemon(symbol string, direction common.SwapD
 		}
 
 		swaps := make([]model.Swap, 0)
-		swapper.DB.Where("status = ? and symbol = ? and direction = ?", SwapQuoteConfirmed, symbol, direction).Order("id asc").Limit(BatchSize).Find(&swaps)
+		swapper.DB.Where("status in (?) and symbol = ? and direction = ?", []common.SwapStatus{SwapQuoteConfirmed, SwapQuoteSending}, symbol, direction).Order("id asc").Limit(BatchSize).Find(&swaps)
 
 		if len(swaps) == 0 {
 			time.Sleep(SwapSleepSecond * time.Second)
@@ -261,20 +260,59 @@ func (swapper *Swapper) swapInstanceDaemon(symbol string, direction common.SwapD
 		util.Logger.Infof("found %d confirmed swap requests on token %s", len(swaps), symbol)
 
 		for _, swap := range swaps {
-			err := swapper.DB.Model(model.Swap{}).Where("id = ?", swap.ID).Updates(
-				map[string]interface{}{
-					"status":     SwapQuoteSending,
-					"updated_at": time.Now().Unix(),
-				}).Error
-			if err != nil {
-				util.Logger.Errorf("update %s table failed: %s", model.Swap{}.TableName(), err.Error())
-				util.SendTelegramMessage(fmt.Sprintf("Urgent alert: update %s table failed: %s", model.Swap{}.TableName(), err.Error()))
+			skip, writeDBErr := func() (bool, error) {
+				isSkip := false
+				tx := swapper.DB.Begin()
+				if err := tx.Error; err != nil {
+					return false, err
+				}
+				if swap.Status == SwapQuoteSending {
+					var swapTx model.SwapTx
+					swapper.DB.Where("deposit_tx_hash = ?", swap.DepositTxHash).First(&swapTx)
+					if swapTx.DepositTxHash == "" {
+						util.Logger.Infof("retry swap, deposit tx hash %s", swap.DepositTxHash)
+						tx.Model(model.Swap{}).Where("id = ?", swap.ID).Updates(
+							map[string]interface{}{
+								"log":        "retry swap",
+								"updated_at": time.Now().Unix(),
+							})
+					} else {
+						tx.Model(model.SwapTx{}).Where("id = ?", swapTx.ID).Updates(
+							map[string]interface{}{
+								"status":     model.WithdrawTxSent,
+								"updated_at": time.Now().Unix(),
+							})
+						tx.Model(model.Swap{}).Where("id = ?", swap.ID).Updates(
+							map[string]interface{}{
+								"status":           SwapSent,
+								"withdraw_tx_hash": swapTx.WithdrawTxHash,
+								"updated_at":       time.Now().Unix(),
+							})
+						isSkip = true
+					}
+				} else {
+					tx.Model(model.Swap{}).Where("id = ?", swap.ID).Updates(
+						map[string]interface{}{
+							"status":     SwapQuoteSending,
+							"updated_at": time.Now().Unix(),
+						})
+				}
+				return isSkip, tx.Commit().Error
+			} ()
+			if writeDBErr != nil {
+				util.Logger.Errorf("write DB error: %s", writeDBErr.Error())
+				util.SendTelegramMessage(fmt.Sprintf("Urgent alert: write DB error: %s", writeDBErr.Error()))
 				continue
 			}
+			if skip {
+				util.Logger.Infof("skip this swap, deposit tx hash %s", swap.DepositTxHash)
+				continue
+			}
+
 			util.Logger.Infof("do swap token %s , direction %s, sponsor: %s, amount %s, decimals %d,", symbol, direction, swap.Sponsor, swap.Amount, swap.Decimals)
 			swapTx, swapErr := swapper.doSwap(&swap, tokenInstance)
 
-			writeDBErr := func() error {
+			writeDBErr = func() error {
 				tx := swapper.DB.Begin()
 				if err := tx.Error; err != nil {
 					return err
