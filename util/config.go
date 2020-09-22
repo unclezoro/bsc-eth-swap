@@ -52,24 +52,27 @@ func (cfg DBConfig) Validate() {
 }
 
 type ChainConfig struct {
-	BalanceMonitorInterval   int64  `json:"balance_monitor_interval"`
-	BSCObserverFetchInterval int64  `json:"bsc_observer_fetch_interval"`
-	BSCStartHeight           int64  `json:"bsc_start_height"`
-	BSCProvider              string `json:"bsc_provider"`
-	BSCConfirmNum            int64  `json:"bsc_confirm_num"`
-	BSCSwapContractAddr      string `json:"bsc_swap_contract_addr"`
-	BSCExplorerUrl           string `json:"bsc_explorer_url"`
-	BSCMaxTrackRetry         int64  `json:"bsc_max_track_retry"`
-	BNBAlertThreshold        string `json:"bnb_alert_threshold"`
+	BalanceMonitorInterval int64 `json:"balance_monitor_interval"`
 
-	ETHObserverFetchInterval int64  `json:"eth_observer_fetch_interval"`
-	ETHStartHeight           int64  `json:"eth_start_height"`
-	ETHProvider              string `json:"eth_provider"`
-	ETHConfirmNum            int64  `json:"eth_confirm_num"`
-	ETHSwapContractAddr      string `json:"eth_swap_contract_addr"`
-	ETHExplorerUrl           string `json:"eth_explorer_url"`
-	ETHMaxTrackRetry         int64  `json:"eth_max_track_retry"`
-	ETHAlertThreshold        string `json:"eth_alert_threshold"`
+	BSCObserverFetchInterval    int64  `json:"bsc_observer_fetch_interval"`
+	BSCStartHeight              int64  `json:"bsc_start_height"`
+	BSCProvider                 string `json:"bsc_provider"`
+	BSCConfirmNum               int64  `json:"bsc_confirm_num"`
+	BSCSwapContractAddr         string `json:"bsc_swap_contract_addr"`
+	BSCExplorerUrl              string `json:"bsc_explorer_url"`
+	BSCMaxTrackRetry            int64  `json:"bsc_max_track_retry"`
+	BNBAlertThreshold           string `json:"bnb_alert_threshold"`
+	BSCWaitMilliSecBetweenSwaps int64  `json:"bsc_wait_milli_sec_between_swaps"`
+
+	ETHObserverFetchInterval    int64  `json:"eth_observer_fetch_interval"`
+	ETHStartHeight              int64  `json:"eth_start_height"`
+	ETHProvider                 string `json:"eth_provider"`
+	ETHConfirmNum               int64  `json:"eth_confirm_num"`
+	ETHSwapContractAddr         string `json:"eth_swap_contract_addr"`
+	ETHExplorerUrl              string `json:"eth_explorer_url"`
+	ETHMaxTrackRetry            int64  `json:"eth_max_track_retry"`
+	ETHAlertThreshold           string `json:"eth_alert_threshold"`
+	ETHWaitMilliSecBetweenSwaps int64  `json:"eth_wait_milli_sec_between_swaps"`
 }
 
 func (cfg ChainConfig) Validate() {
