@@ -61,16 +61,7 @@ type NewTokenRequest struct {
 
 	IconUrl string `json:"icon_url"`
 
-	BSCKeyType          string `json:"bsc_key_type"`
-	BSCKeyAWSRegion     string `json:"bsc_key_aws_region"`
-	BSCKeyAWSSecretName string `json:"bsc_key_aws_secret_name"`
-	BSCPrivateKey       string `json:"bsc_private_key"`
 	BSCERC20Threshold   string `json:"bsc_erc20_threshold"`
-
-	ETHKeyType          string `json:"eth_key_type"`
-	ETHKeyAWSRegion     string `json:"eth_aws_region"`
-	ETHKeyAWSSecretName string `json:"eth_key_aws_secret_name"`
-	ETHPrivateKey       string `json:"eth_private_key"`
 	ETHERC20Threshold   string `json:"eth_erc20_threshold"`
 }
 
@@ -125,15 +116,15 @@ func (admin *Admin) AddToken(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	bscPriKey, bscPubKey, err := swap.GetPrivateKey(newToken.BSCKeyType, newToken.BSCKeyAWSSecretName, newToken.BSCKeyAWSRegion, newToken.BSCPrivateKey)
+	tokenKeys, err := swap.GetAllTokenKeys(admin.Config)
 	if err != nil {
-		http.Error(w, fmt.Sprintf("failed to get bsc private key: %s", err.Error()), http.StatusBadRequest)
+		http.Error(w, fmt.Sprintf("failed to get token secret keys: %s", err.Error()), http.StatusInternalServerError)
 		return
 	}
 
-	ethPriKey, ethPubKey, err := swap.GetPrivateKey(newToken.ETHKeyType, newToken.ETHKeyAWSSecretName, newToken.ETHKeyAWSRegion, newToken.ETHPrivateKey)
-	if err != nil {
-		http.Error(w, fmt.Sprintf("failed to get eth private key: %s", err.Error()), http.StatusBadRequest)
+	tokenKey, ok := tokenKeys[newToken.Symbol]
+	if !ok {
+		http.Error(w, fmt.Sprintf("missing token key for %s", newToken.Symbol), http.StatusBadRequest)
 		return
 	}
 
@@ -146,17 +137,9 @@ func (admin *Admin) AddToken(w http.ResponseWriter, r *http.Request) {
 		LowBound:             newToken.LowerBound,
 		UpperBound:           newToken.UpperBound,
 		IconUrl:              newToken.IconUrl,
-		BSCKeyType:           newToken.BSCKeyType,
-		BSCKeyAWSRegion:      newToken.BSCKeyAWSRegion,
-		BSCKeyAWSSecretName:  newToken.BSCKeyAWSSecretName,
-		BSCPrivateKey:        newToken.BSCPrivateKey,
-		BSCSenderAddr:        strings.ToLower(swap.GetAddress(bscPubKey).String()),
+		BSCSenderAddr:        strings.ToLower(swap.GetAddress(tokenKey.BSCPublicKey).String()),
 		BSCERC20Threshold:    newToken.BSCERC20Threshold,
-		ETHKeyType:           newToken.ETHKeyType,
-		ETHKeyAWSRegion:      newToken.ETHKeyAWSRegion,
-		ETHKeyAWSSecretName:  newToken.ETHKeyAWSSecretName,
-		ETHPrivateKey:        newToken.ETHPrivateKey,
-		ETHSenderAddr:        strings.ToLower(swap.GetAddress(ethPubKey).String()),
+		ETHSenderAddr:        strings.ToLower(swap.GetAddress(tokenKey.ETHPublicKey).String()),
 		ETHERC20Threshold:    newToken.ETHERC20Threshold,
 		Available:            false,
 	}
@@ -176,7 +159,7 @@ func (admin *Admin) AddToken(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// add token in swapper
-	err = admin.Swapper.AddToken(&token, bscPriKey, bscPubKey, ethPriKey, ethPubKey)
+	err = admin.Swapper.AddToken(&token, tokenKey)
 	if err != nil {
 		dbErr := admin.DB.Where("symbol = ?", tokenModel.Symbol).Unscoped().Delete(&model.Token{}).Error
 		if dbErr != nil {
@@ -239,39 +222,6 @@ func tokenBasicCheck(token *NewTokenRequest) error {
 	}
 	if !common.IsHexAddress(token.ETHContractAddr) {
 		return fmt.Errorf("eth_contract_addr is wrong")
-	}
-	// check bsc key
-	if token.BSCKeyType != scmn.LocalPrivateKey && token.BSCKeyType != scmn.AWSPrivateKey {
-		return fmt.Errorf("bsc_key_type should be %s or %s", scmn.LocalPrivateKey, scmn.AWSPrivateKey)
-	}
-	if token.BSCKeyType == scmn.AWSPrivateKey {
-		if token.BSCKeyAWSRegion == "" {
-			return fmt.Errorf("bsc_key_aws_region should not be empty")
-		}
-		if token.BSCKeyAWSSecretName == "" {
-			return fmt.Errorf("bsc_key_aws_secret_name should not be empty")
-		}
-	} else {
-		if token.BSCPrivateKey == "" {
-			return fmt.Errorf("bsc_private_key should not be empty")
-		}
-	}
-
-	// check eth key
-	if token.ETHKeyType != scmn.LocalPrivateKey && token.ETHKeyType != scmn.AWSPrivateKey {
-		return fmt.Errorf("eth_key_type should be %s or %s", scmn.LocalPrivateKey, scmn.AWSPrivateKey)
-	}
-	if token.ETHKeyType == scmn.AWSPrivateKey {
-		if token.ETHKeyAWSRegion == "" {
-			return fmt.Errorf("eth_key_aws_region should not be empty")
-		}
-		if token.ETHKeyAWSSecretName == "" {
-			return fmt.Errorf("eth_key_aws_secret_name should not be empty")
-		}
-	} else {
-		if token.ETHPrivateKey == "" {
-			return fmt.Errorf("eth_private_key should not be empty")
-		}
 	}
 
 	return nil

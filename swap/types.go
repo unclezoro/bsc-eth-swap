@@ -63,3 +63,10 @@ type TokenInstance struct {
 	ETHTxSender          ethcom.Address
 	ETHERC20Threshold    *big.Int
 }
+
+type TokenKey struct {
+	BSCPrivateKey *ecdsa.PrivateKey
+	BSCPublicKey  *ecdsa.PublicKey
+	ETHPrivateKey *ecdsa.PrivateKey
+	ETHPublicKey  *ecdsa.PublicKey
+}

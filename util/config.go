@@ -10,11 +10,12 @@ import (
 )
 
 type Config struct {
-	DBConfig    DBConfig    `json:"db_config"`
-	ChainConfig ChainConfig `json:"chain_config"`
-	LogConfig   LogConfig   `json:"log_config"`
-	AlertConfig AlertConfig `json:"alert_config"`
-	AdminConfig AdminConfig `json:"admin_config"`
+	KeyManagerConfig KeyManagerConfig `json:"key_manager_config"`
+	DBConfig         DBConfig         `json:"db_config"`
+	ChainConfig      ChainConfig      `json:"chain_config"`
+	LogConfig        LogConfig        `json:"log_config"`
+	AlertConfig      AlertConfig      `json:"alert_config"`
+	AdminConfig      AdminConfig      `json:"admin_config"`
 }
 
 func (cfg *Config) Validate() {
@@ -35,6 +36,28 @@ func (cfg AlertConfig) Validate() {
 	if cfg.BlockUpdateTimeout <= 0 {
 		panic(fmt.Sprintf("block_update_timeout should be larger than 0"))
 	}
+}
+
+type KeyManagerConfig struct {
+	KeyType       string           `json:"key_type"`
+	AWSRegion     string           `json:"aws_region"`
+	AWSSecretName string           `json:"aws_secret_name"`
+	LocalKeys     []TokenSecretKey `json:"local_keys"`
+}
+
+func (cfg KeyManagerConfig) Validate() {
+	if cfg.KeyType == common.LocalPrivateKey && len(cfg.LocalKeys) == 0 {
+		panic("missing local private key")
+	}
+	if cfg.KeyType == common.AWSPrivateKey && (cfg.AWSRegion == "" || cfg.AWSSecretName == "") {
+		panic("Missing aws key region or name")
+	}
+}
+
+type TokenSecretKey struct {
+	Symbol        string `json:"symbol"`
+	BSCPrivateKey string `json:"bsc_private_key"`
+	ETHPrivateKey string `json:"eth_private_key"`
 }
 
 type DBConfig struct {

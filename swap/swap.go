@@ -2,7 +2,6 @@ package swap
 
 import (
 	"context"
-	"crypto/ecdsa"
 	"fmt"
 	"math/big"
 	"strings"
@@ -25,7 +24,7 @@ func NewSwapper(db *gorm.DB, cfg *util.Config, bscClient, ethClient *ethclient.C
 	tokens := make([]model.Token, 0)
 	db.Find(&tokens)
 
-	tokenInstances, err := buildTokenInstance(tokens)
+	tokenInstances, err := buildTokenInstance(tokens, cfg)
 	if err != nil {
 		return nil, err
 	}
@@ -693,7 +692,7 @@ func (swapper *Swapper) insertSwapTxToDB(data *model.SwapTx) error {
 	return tx.Commit().Error
 }
 
-func (swapper *Swapper) AddToken(token *model.Token, bscPriKey *ecdsa.PrivateKey, bscPubKey *ecdsa.PublicKey, ethPriKey *ecdsa.PrivateKey, ethPubKey *ecdsa.PublicKey) error {
+func (swapper *Swapper) AddToken(token *model.Token, tokenKey *TokenKey) error {
 	lowBound := big.NewInt(0)
 	_, ok := lowBound.SetString(token.LowBound, 10)
 	if !ok {
@@ -720,13 +719,13 @@ func (swapper *Swapper) AddToken(token *model.Token, bscPriKey *ecdsa.PrivateKey
 		CloseSignal:          make(chan bool),
 		LowBound:             lowBound,
 		UpperBound:           upperBound,
-		BSCPrivateKey:        bscPriKey,
+		BSCPrivateKey:        tokenKey.BSCPrivateKey,
 		BSCTokenContractAddr: ethcom.HexToAddress(token.BSCTokenContractAddr),
-		BSCTxSender:          GetAddress(bscPubKey),
+		BSCTxSender:          GetAddress(tokenKey.BSCPublicKey),
 		BSCERC20Threshold:    bscERC20Threshold,
-		ETHPrivateKey:        ethPriKey,
+		ETHPrivateKey:        tokenKey.ETHPrivateKey,
 		ETHTokenContractAddr: ethcom.HexToAddress(token.ETHTokenContractAddr),
-		ETHTxSender:          GetAddress(ethPubKey),
+		ETHTxSender:          GetAddress(tokenKey.ETHPublicKey),
 		ETHERC20Threshold:    ethERC20Threshold,
 	}
 	swapper.BSCContractAddrToSymbol[strings.ToLower(token.BSCTokenContractAddr)] = token.Symbol

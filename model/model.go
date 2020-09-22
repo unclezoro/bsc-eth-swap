@@ -137,17 +137,9 @@ type Token struct {
 
 	IconUrl string
 
-	BSCKeyType          string `gorm:"not null"`
-	BSCKeyAWSRegion     string
-	BSCKeyAWSSecretName string
-	BSCPrivateKey       string // won't present in production environment
 	BSCSenderAddr       string `gorm:"not null"`
 	BSCERC20Threshold   string `gorm:"not null"`
 
-	ETHKeyType          string `gorm:"not null"`
-	ETHKeyAWSRegion     string
-	ETHKeyAWSSecretName string
-	ETHPrivateKey       string // won't present in production environment
 	ETHSenderAddr       string `gorm:"not null"`
 	ETHERC20Threshold   string `gorm:"not null"`
 }
