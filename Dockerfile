@@ -1,5 +1,7 @@
-FROM ubuntu:18.04
+FROM golang:1.13-alpine
 
+# Set up apk dependencies
+ENV PACKAGES make git libc-dev bash gcc linux-headers eudev-dev curl ca-certificates
 # Set working directory for the build
 WORKDIR /opt/app
 
