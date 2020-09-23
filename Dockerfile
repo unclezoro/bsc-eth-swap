@@ -10,5 +10,5 @@ COPY ./build/swap-backend /opt/app
 USER 1000
 
 # Run the app
-CMD /opt/app/swap-backend
+CMD /opt/app/swap-backend --config-type aws  --aws-region ${AWS_REGION}  --aws-secret-key  ${AWS_SECRET_KEY}
 
