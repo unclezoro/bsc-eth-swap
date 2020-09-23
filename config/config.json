@@ -1,38 +1,58 @@
 {
+  "key_manager_config": {
+    "key_type": "local_private_key",
+    "aws_region": "",
+    "aws_secret_name": "",
+    "local_keys": [
+      {
+        "symbol": "ZJUBFD",
+        "bsc_private_key": "92b22f814c6eccd5838f734162ebc79f1863d0e8d3ab558664c28ff55a3c4b1d",
+        "eth_private_key": "9b28f36fbd67381120752d6172ecdcf10e06ab2d9a1367aac00cdcd6ac7855d3"
+      }
+    ],
+    "local_hmac_key": "abc123456"
+  },
   "db_config": {
     "dialect": "sqlite3",
-    "db_path": "./test.db"
+    "db_path": ""
   },
   "chain_config": {
-    "bsc_start_height": 1928680,
-    "bsc_provider": "https://data-seed-prebsc-1-s1.binance.org:8545",
-    "bsc_confirm_num": 10,
-    "bsc_chain_id": 97,
-    "bsc_swap_contract_addr": "0x7b1f3B97c89f9A7B85fA96f47B30dE2DbFddFBc9",
-
-    "eth_start_height": 1928680,
-    "eth_provider": "https://ropsten.infura.io/v3/16a60635f67b474cb24ce5ee843b96be",
-    "eth_confirm_num": 10,
-    "eth_chain_id": 97,
-    "eth_swap_contract_addr": "0x7b1f3B97c89f9A7B85fA96f47B30dE2DbFddFBc9"
+    "balance_monitor_interval": 60,
+    "bsc_observer_fetch_interval": 1,
+    "bsc_start_height": 1963823,
+    "bsc_provider": "https://data-seed-prebsc-1-s3.binance.org:8545",
+    "bsc_confirm_num": 5,
+    "bsc_swap_contract_addr": "0x6D4a17A4c362DdD7d6314A41734e0C47c786c343",
+    "bsc_explorer_url": "https://testnet.bscscan.com/tx",
+    "bsc_max_track_retry": 60,
+    "bnb_alert_threshold": "1000000000000000000",
+    "bsc_wait_milli_sec_between_swaps": 100,
+    "eth_observer_fetch_interval": 10,
+    "eth_start_height": 8696282,
+    "eth_provider": "https://rinkeby.infura.io/v3/1c5b38a27f92410cb5feb13b6efb2e14",
+    "eth_confirm_num": 2,
+    "eth_swap_contract_addr": "0x0D91235A3C64d8edb34C3c7085ED357b56770ED4",
+    "eth_explorer_url": "https://ropsten.etherscan.io/tx",
+    "eth_max_track_retry": 600,
+    "eth_alert_threshold": "1000000000000000000",
+    "eth_wait_milli_sec_between_swaps": 200
   },
   "log_config": {
     "level": "INFO",
     "filename": "",
-    "max_file_size_in_mb": 0,
-    "max_backups_of_log_files": 0,
-    "max_age_to_retain_log_files_in_days": 0,
+    "max_file_size_in_mb": 100,
+    "max_backups_of_log_files": 1,
+    "max_age_to_retain_log_files_in_days": 30,
     "use_console_logger": true,
     "use_file_logger": false,
     "compress": false
   },
-  "admin_config": {
-    "listen_addr": ":9080"
-  },
   "alert_config": {
     "telegram_bot_id": "",
     "telegram_chat_id": "",
-
-    "block_update_timeout": 300
+    "block_update_timeout": 10
+  },
+  "admin_config": {
+    "listen_addr": ":8000"
   }
 }
