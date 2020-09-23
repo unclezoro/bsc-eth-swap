@@ -6,11 +6,15 @@ ENV PACKAGES make git libc-dev bash gcc linux-headers eudev-dev curl ca-certific
 WORKDIR /opt/app
 
 # Add source files
-COPY ./build/swap-backend /opt/app
+COPY . .
+
+# Install minimum necessary dependencies, remove packages
+RUN apk add --no-cache $PACKAGES && \
+    make build
 
 # Run as non-root user for security
 USER 1000
 
 # Run the app
-CMD /opt/app/swap-backend --config-type aws  --aws-region ${AWS_REGION}  --aws-secret-key  ${AWS_SECRET_KEY}
+CMD ./build/swap-backend --config-type aws  --aws-region ${AWS_REGION}  --aws-secret-key  ${AWS_SECRET_KEY}
 
