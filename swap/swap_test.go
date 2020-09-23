@@ -1,22 +1,18 @@
 package swap
 
 import (
+	"strings"
 	"testing"
 
+	"github.com/binance-chain/bsc-eth-swap/model"
 	"github.com/ethereum/go-ethereum/ethclient"
 	_ "github.com/jinzhu/gorm/dialects/mysql"
 	_ "github.com/jinzhu/gorm/dialects/sqlite"
 	"github.com/stretchr/testify/require"
 )
 
-func TestSwap_InsertAndConfirmSwapRequest(t *testing.T) {
+func TestSwap_SwapInstanceCheck(t *testing.T) {
 	config := getTestConfig()
-
-	db, err := prepareDB(config)
-	require.NoError(t, err)
-
-	err = insertABCToken(db)
-	require.NoError(t, err)
 
 	bscClient, err := ethclient.Dial(config.ChainConfig.BSCProvider)
 	require.NoError(t, err)
@@ -24,16 +20,26 @@ func TestSwap_InsertAndConfirmSwapRequest(t *testing.T) {
 	ethClient, err := ethclient.Dial(config.ChainConfig.ETHProvider)
 	require.NoError(t, err)
 
-	swapInstance, err := NewSwapper(db, config, bscClient, ethClient)
+	db, err := prepareDB(config)
 	require.NoError(t, err)
 
-	clientPrivateKey := "580c4a31fffda2006462183b6ecc82a67a7fc772568c5b7191e3ed5e4be1bf04"
+	err = insertABCToken(db)
+	require.NoError(t, err)
 
-	{
-		go swapInstance.monitorSwapRequestDaemon()
-		go swapInstance.confirmSwapRequestDaemon()
-		go swapInstance.createSwapDaemon()
-		go swapInstance.trackSwapTxDaemon()
+	err = insertDEFToken(db)
+	require.NoError(t, err)
+
+	swapInstance, err := prepareTest(db, bscClient, ethClient, config)
+	require.NoError(t, err)
+
+	require.Equal(t, 2, len(swapInstance.TokenInstances))
+
+	tokens := make([]model.Token, 0)
+	db.Find(&tokens)
+
+	for _, token := range tokens {
+		require.Equal(t, token.Symbol, swapInstance.BSCContractAddrToSymbol[strings.ToLower(token.BSCTokenContractAddr)])
+		require.Equal(t, token.Symbol, swapInstance.ETHContractAddrToSymbol[strings.ToLower(token.ETHTokenContractAddr)])
 	}
 
 }
