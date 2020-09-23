@@ -117,6 +117,8 @@ type Swap struct {
 
 	// used to log more message about how this swap failed or invalid
 	Log string
+
+	RecordHash string `gorm:"not null"`
 }
 
 func (Swap) TableName() string {

@@ -5,8 +5,9 @@ import (
 	"fmt"
 	"io/ioutil"
 
-	"github.com/binance-chain/bsc-eth-swap/common"
 	ethcom "github.com/ethereum/go-ethereum/common"
+
+	"github.com/binance-chain/bsc-eth-swap/common"
 )
 
 type Config struct {
@@ -39,16 +40,28 @@ func (cfg AlertConfig) Validate() {
 }
 
 type KeyManagerConfig struct {
-	KeyType       string           `json:"key_type"`
-	AWSRegion     string           `json:"aws_region"`
-	AWSSecretName string           `json:"aws_secret_name"`
-	LocalKeys     []TokenSecretKey `json:"local_keys"`
+	KeyType       string `json:"key_type"`
+	AWSRegion     string `json:"aws_region"`
+	AWSSecretName string `json:"aws_secret_name"`
+
+	// local keys
+	LocalKeys    []TokenSecretKey `json:"local_keys"`
+	LocalHMACKey string           `json:"local_hmac_key"`
+}
+
+type KeyConfig struct {
+	TokenKeys []TokenSecretKey `json:"token_keys"`
+	HMACKey   string           `json:"hmac_key"`
 }
 
 func (cfg KeyManagerConfig) Validate() {
 	if cfg.KeyType == common.LocalPrivateKey && len(cfg.LocalKeys) == 0 {
 		panic("missing local private key")
 	}
+	if cfg.KeyType == common.LocalPrivateKey && len(cfg.LocalHMACKey) == 0 {
+		panic("missing local hmac key")
+	}
+
 	if cfg.KeyType == common.AWSPrivateKey && (cfg.AWSRegion == "" || cfg.AWSSecretName == "") {
 		panic("Missing aws key region or name")
 	}
