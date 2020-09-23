@@ -5,9 +5,14 @@
     "aws_secret_name": "",
     "local_keys": [
       {
-        "symbol": "ZJUBFD",
-        "bsc_private_key": "92b22f814c6eccd5838f734162ebc79f1863d0e8d3ab558664c28ff55a3c4b1d",
-        "eth_private_key": "9b28f36fbd67381120752d6172ecdcf10e06ab2d9a1367aac00cdcd6ac7855d3"
+        "symbol": "ABC",
+        "bsc_private_key": "b0badc64774a3b0929b8e8f831a5178d5c617a4aa3d00ac5336b5652f961d8a6",
+        "eth_private_key": "b0badc64774a3b0929b8e8f831a5178d5c617a4aa3d00ac5336b5652f961d8a6"
+      },
+      {
+        "symbol": "DEF",
+        "bsc_private_key": "fa173dcd397860ffe7484452b0e1425b7606ac54ad6145af151e2a02b52e7a7f",
+        "eth_private_key": "fa173dcd397860ffe7484452b0e1425b7606ac54ad6145af151e2a02b52e7a7f"
       }
     ],
     "local_hmac_key": "abc123456"
