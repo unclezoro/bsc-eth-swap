@@ -2,8 +2,11 @@ package swap
 
 import (
 	"crypto/ecdsa"
+	"fmt"
+	"golang.org/x/crypto/sha3"
 	"io/ioutil"
 	"math/big"
+	"math/rand"
 	"strings"
 	"time"
 
@@ -17,7 +20,11 @@ import (
 	"github.com/jinzhu/gorm"
 )
 
+var characterRunes = []rune("abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789")
+
+
 func prepareTest(db *gorm.DB, bscClient, ethClient *ethclient.Client, config *util.Config) (*Swapper, error) {
+	util.InitLogger(config.LogConfig)
 	swapInstance, err := NewSwapper(db, config, bscClient, ethClient)
 	if err != nil {
 		return nil, err
@@ -66,7 +73,7 @@ func insertABCToken(db *gorm.DB) error {
 		Decimals:             18,
 		BSCTokenContractAddr: strings.ToLower("0xCCE0532FE1029f1A6B7ccca4C522cF9870a6a8Ed"),
 		ETHTokenContractAddr: strings.ToLower("0x055d208b90DA0E3A431CA7E0fba326888Ef8a822"),
-		LowBound:             "0",
+		LowBound:             "10000",
 		UpperBound:           "1000000000000000000000000",
 		BSCSenderAddr:        "0x0C5006c9322b6dC49BC475d7635659F7147326d3",
 		BSCERC20Threshold:    "1000000000000000000",
@@ -156,4 +163,44 @@ func swapETH2BSC(client *ethclient.Client, privateKey *ecdsa.PrivateKey, ethSwap
 	}
 	util.Logger.Infof("https://rinkeby.etherscan.io/tx/%s", swapTx.Hash().String())
 	return swapTx.Hash(), nil
+}
+
+func insertTxEventLogToDB(db *gorm.DB, data *model.TxEventLog) error {
+	tx := db.Begin()
+	if err := tx.Error; err != nil {
+		return err
+	}
+
+	if err := tx.Create(data).Error; err != nil {
+		tx.Rollback()
+		return err
+	}
+
+	return tx.Commit().Error
+}
+
+func NewSHA1Hash(n ...int) string {
+	noRandomCharacters := 64
+
+	if len(n) > 0 {
+		noRandomCharacters = n[0]
+	}
+
+	randString := RandomString(noRandomCharacters)
+
+	hash := sha3.NewLegacyKeccak256()
+	hash.Write([]byte(randString))
+	bs := hash.Sum(nil)
+
+	return fmt.Sprintf("0x%x", bs)
+}
+
+
+// RandomString generates a random string of n length
+func RandomString(n int) string {
+	b := make([]rune, n)
+	for i := range b {
+		b[i] = characterRunes[rand.Intn(len(characterRunes))]
+	}
+	return string(b)
 }
