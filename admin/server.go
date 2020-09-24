@@ -79,7 +79,7 @@ func (admin *Admin) AddToken(w http.ResponseWriter, r *http.Request) {
 	}
 
 	if !admin.checkAuth(apiKey, reqBody, auth) {
-		http.Error(w, "auth is not correct", http.StatusMethodNotAllowed)
+		http.Error(w, "auth is not correct", http.StatusUnauthorized)
 		return
 	}
 
@@ -304,7 +304,7 @@ func (admin *Admin) UpdateTokenHandler(w http.ResponseWriter, r *http.Request) {
 	}
 
 	if !admin.checkAuth(apiKey, reqBody, auth) {
-		http.Error(w, "auth is not correct", http.StatusMethodNotAllowed)
+		http.Error(w, "auth is not correct", http.StatusUnauthorized)
 		return
 	}
 
@@ -396,7 +396,7 @@ func (admin *Admin) DeleteTokenHandler(w http.ResponseWriter, r *http.Request) {
 	}
 
 	if !admin.checkAuth(apiKey, reqBody, auth) {
-		http.Error(w, "auth is not correct", http.StatusMethodNotAllowed)
+		http.Error(w, "auth is not correct", http.StatusUnauthorized)
 		return
 	}
 
