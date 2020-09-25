@@ -130,7 +130,11 @@ func main() {
 	}
 	swapInstance.Start()
 
-	admin := admin.NewAdmin(config, db, swapInstance, bscExecutor, ethExecutor)
+	signer, err := util.NewHmacSignerFromConfig(config)
+	if err != nil {
+		panic(fmt.Sprintf("new hmac singer error, err=%s", err.Error()))
+	}
+	admin := admin.NewAdmin(config, db, signer, swapInstance, bscExecutor, ethExecutor)
 	go admin.Serve()
 
 	select {}

@@ -45,13 +45,17 @@ type KeyManagerConfig struct {
 	AWSSecretName string `json:"aws_secret_name"`
 
 	// local keys
-	LocalKeys    []TokenSecretKey `json:"local_keys"`
-	LocalHMACKey string           `json:"local_hmac_key"`
+	LocalKeys           []TokenSecretKey `json:"local_keys"`
+	LocalHMACKey        string           `json:"local_hmac_key"`
+	LocalAdminApiKey    string           `json:"local_admin_api_key"`
+	LocalAdminSecretKey string           `json:"local_admin_secret_key"`
 }
 
 type KeyConfig struct {
-	TokenKeys []TokenSecretKey `json:"token_keys"`
-	HMACKey   string           `json:"hmac_key"`
+	TokenKeys      []TokenSecretKey `json:"token_keys"`
+	HMACKey        string           `json:"hmac_key"`
+	AdminApiKey    string           `json:"admin_api_key"`
+	AdminSecretKey string           `json:"admin_secret_key"`
 }
 
 func (cfg KeyManagerConfig) Validate() {
@@ -60,6 +64,12 @@ func (cfg KeyManagerConfig) Validate() {
 	}
 	if cfg.KeyType == common.LocalPrivateKey && len(cfg.LocalHMACKey) == 0 {
 		panic("missing local hmac key")
+	}
+	if cfg.KeyType == common.LocalPrivateKey && len(cfg.LocalAdminApiKey) == 0 {
+		panic("missing local admin api key")
+	}
+	if cfg.KeyType == common.LocalPrivateKey && len(cfg.LocalAdminSecretKey) == 0 {
+		panic("missing local admin secret key")
 	}
 
 	if cfg.KeyType == common.AWSPrivateKey && (cfg.AWSRegion == "" || cfg.AWSSecretName == "") {

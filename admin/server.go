@@ -3,6 +3,7 @@ package admin
 import (
 	"encoding/json"
 	"fmt"
+	"io/ioutil"
 	"math/big"
 	"net/http"
 	"regexp"
@@ -34,16 +35,18 @@ type Admin struct {
 
 	Config *util.Config
 
-	Swapper *swap.Swapper
+	HmacSigner *util.HmacSigner
+	Swapper    *swap.Swapper
 
 	BSCExecutor executor.Executor
 	ETHExecutor executor.Executor
 }
 
-func NewAdmin(config *util.Config, db *gorm.DB, swapper *swap.Swapper, bscExecutor executor.Executor, ethExecutor executor.Executor) *Admin {
+func NewAdmin(config *util.Config, db *gorm.DB, signer *util.HmacSigner, swapper *swap.Swapper, bscExecutor executor.Executor, ethExecutor executor.Executor) *Admin {
 	return &Admin{
 		DB:          db,
 		Config:      config,
+		HmacSigner:  signer,
 		Swapper:     swapper,
 		BSCExecutor: bscExecutor,
 		ETHExecutor: ethExecutor,
@@ -61,14 +64,27 @@ type NewTokenRequest struct {
 
 	IconUrl string `json:"icon_url"`
 
-	BSCERC20Threshold   string `json:"bsc_erc20_threshold"`
-	ETHERC20Threshold   string `json:"eth_erc20_threshold"`
+	BSCERC20Threshold string `json:"bsc_erc20_threshold"`
+	ETHERC20Threshold string `json:"eth_erc20_threshold"`
 }
 
 func (admin *Admin) AddToken(w http.ResponseWriter, r *http.Request) {
-	var newToken NewTokenRequest
+	apiKey := r.Header.Get("ApiKey")
+	auth := r.Header.Get("Authorization")
 
-	err := json.NewDecoder(r.Body).Decode(&newToken)
+	reqBody, err := ioutil.ReadAll(r.Body)
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusBadRequest)
+		return
+	}
+
+	if !admin.checkAuth(apiKey, reqBody, auth) {
+		http.Error(w, "auth is not correct", http.StatusUnauthorized)
+		return
+	}
+
+	var newToken NewTokenRequest
+	err = json.Unmarshal(reqBody, &newToken)
 	if err != nil {
 		http.Error(w, err.Error(), http.StatusBadRequest)
 		return
@@ -278,9 +294,22 @@ func updateCheck(update *UpdateTokenRequest) error {
 }
 
 func (admin *Admin) UpdateTokenHandler(w http.ResponseWriter, r *http.Request) {
-	var updateToken UpdateTokenRequest
+	apiKey := r.Header.Get("ApiKey")
+	auth := r.Header.Get("Authorization")
 
-	err := json.NewDecoder(r.Body).Decode(&updateToken)
+	reqBody, err := ioutil.ReadAll(r.Body)
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusBadRequest)
+		return
+	}
+
+	if !admin.checkAuth(apiKey, reqBody, auth) {
+		http.Error(w, "auth is not correct", http.StatusUnauthorized)
+		return
+	}
+
+	var updateToken UpdateTokenRequest
+	err = json.Unmarshal(reqBody, &updateToken)
 	if err != nil {
 		http.Error(w, err.Error(), http.StatusBadRequest)
 		return
@@ -352,10 +381,33 @@ func (admin *Admin) UpdateTokenHandler(w http.ResponseWriter, r *http.Request) {
 	}
 }
 
-func (admin *Admin) DeleteTokenHandler(w http.ResponseWriter, r *http.Request) {
-	params := mux.Vars(r)
+type DeleteTokenRequest struct {
+	Symbol string `json:"symbol"`
+}
 
-	symbol := params["symbol"]
+func (admin *Admin) DeleteTokenHandler(w http.ResponseWriter, r *http.Request) {
+	apiKey := r.Header.Get("ApiKey")
+	auth := r.Header.Get("Authorization")
+
+	reqBody, err := ioutil.ReadAll(r.Body)
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusBadRequest)
+		return
+	}
+
+	if !admin.checkAuth(apiKey, reqBody, auth) {
+		http.Error(w, "auth is not correct", http.StatusUnauthorized)
+		return
+	}
+
+	var deleteToken DeleteTokenRequest
+	err = json.Unmarshal(reqBody, &deleteToken)
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusBadRequest)
+		return
+	}
+
+	symbol := deleteToken.Symbol
 	if symbol == "" {
 		http.Error(w, "required parameter 'symbol' is missing", http.StatusBadRequest)
 		return
@@ -372,7 +424,7 @@ func (admin *Admin) DeleteTokenHandler(w http.ResponseWriter, r *http.Request) {
 	}
 
 	token := model.Token{}
-	err := admin.DB.Where("symbol = ?", symbol).First(&token).Error
+	err = admin.DB.Where("symbol = ?", symbol).First(&token).Error
 	if err != nil {
 		http.Error(w, fmt.Sprintf("token %s is not found", symbol), http.StatusBadRequest)
 		return
@@ -434,6 +486,14 @@ func (admin *Admin) Healthz(w http.ResponseWriter, r *http.Request) {
 	w.WriteHeader(http.StatusOK)
 }
 
+func (admin *Admin) checkAuth(apiKey string, payload []byte, hash string) bool {
+	if admin.HmacSigner.ApiKey != apiKey {
+		return false
+	}
+
+	return admin.HmacSigner.Verify(payload, hash)
+}
+
 func (admin *Admin) Serve() {
 	router := mux.NewRouter()
 
@@ -441,7 +501,7 @@ func (admin *Admin) Serve() {
 	router.HandleFunc("/healthz", admin.Healthz).Methods("GET")
 	router.HandleFunc("/add_token", admin.AddToken).Methods("POST")
 	router.HandleFunc("/update_token", admin.UpdateTokenHandler).Methods("PUT")
-	router.HandleFunc("/delete_token/{symbol}", admin.DeleteTokenHandler).Methods("DELETE")
+	router.HandleFunc("/delete_token", admin.DeleteTokenHandler).Methods("DELETE")
 
 	listenAddr := DefaultListenAddr
 	if admin.Config.AdminConfig.ListenAddr != "" {
