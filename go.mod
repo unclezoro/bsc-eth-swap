@@ -15,5 +15,6 @@ require (
 	github.com/spf13/viper v1.6.3
 	github.com/stretchr/testify v1.5.1
 	github.com/tendermint/tendermint v0.32.3
+	golang.org/x/crypto v0.0.0-20200311171314-f7b00557c8c4
 	gopkg.in/natefinch/lumberjack.v2 v2.0.0
 )

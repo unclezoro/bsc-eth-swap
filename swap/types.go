@@ -27,10 +27,8 @@ const (
 
 	BatchSize            = 50
 	TrackSentTxBatchSize = 100
-	SleepTime            = 10
-	SwapSleepSecond      = 5
-
-	BalanceMonitorInterval = 30
+	SleepTime            = 5
+	SwapSleepSecond      = 2
 
 	TxFailedStatus = 0x00
 )
