@@ -38,7 +38,7 @@ func initFlags() {
 }
 
 func printUsage() {
-	fmt.Print("usage: ./send_request --request-type request_file_path\n")
+	fmt.Print("usage: ./send_request --request-path request_file_path\n")
 }
 
 func main() {
@@ -87,7 +87,7 @@ func main() {
 		return
 	}
 
-	signer := util.NewHmacSigner(req.ApiSecret, req.ApiKey)
+	signer := util.NewHmacSigner(req.ApiKey, req.ApiSecret)
 	hash := signer.Sign(body)
 
 	httpReq, err := http.NewRequest(req.Method, req.Endpoint, bytes.NewReader(body))
