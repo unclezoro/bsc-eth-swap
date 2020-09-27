@@ -80,6 +80,7 @@ func (swapper *Swapper) UpdateSenderAddresses() error {
 		token := model.Token{}
 		err = swapper.DB.Where("symbol = ?", symbol).First(&token).Error
 		if err != nil {
+			util.Logger.Error("find token error, symbol=%s, err=%s", token.Symbol, err.Error())
 			continue
 		}
 
