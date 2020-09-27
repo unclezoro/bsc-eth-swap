@@ -81,7 +81,7 @@ func main() {
 		return
 	}
 
-	body, err := json.Marshal(req)
+	body, err := json.Marshal(req.RequestBody)
 	if err != nil {
 		println("marshal request body error")
 		return
