@@ -66,6 +66,33 @@ func (swapper *Swapper) Start() {
 	go swapper.alertDaemon()
 }
 
+func (swapper *Swapper) UpdateSenderAddresses() error {
+	tokenKeys, err := GetAllTokenKeys(swapper.Config)
+	if err != nil {
+		return err
+	}
+
+	for symbol, tokenKey := range tokenKeys {
+		bscSender := strings.ToLower(GetAddress(tokenKey.BSCPublicKey).String())
+		ethSender := strings.ToLower(GetAddress(tokenKey.ETHPublicKey).String())
+
+		// get token
+		token := model.Token{}
+		err = swapper.DB.Where("symbol = ?", symbol).First(&token).Error
+		if err != nil {
+			continue
+		}
+
+		if token.BSCSenderAddr != bscSender || token.ETHSenderAddr != ethSender {
+			token.BSCSenderAddr = bscSender
+			token.ETHSenderAddr = ethSender
+
+			swapper.DB.Save(token)
+		}
+	}
+	return nil
+}
+
 func (swapper *Swapper) monitorSwapRequestDaemon() {
 	for {
 		txEventLogs := make([]model.TxEventLog, 0)

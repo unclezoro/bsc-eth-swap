@@ -7,7 +7,6 @@ require (
 	github.com/btcsuite/btcd v0.20.1-beta // indirect
 	github.com/ethereum/go-ethereum v1.9.12
 	github.com/gorilla/mux v1.8.0
-	github.com/hashicorp/go-uuid v1.0.1
 	github.com/jinzhu/gorm v1.9.16
 	github.com/mattn/go-sqlite3 v2.0.1+incompatible // indirect
 	github.com/op/go-logging v0.0.0-20160315200505-970db520ece7

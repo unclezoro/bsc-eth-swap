@@ -252,12 +252,6 @@ type UpdateTokenRequest struct {
 	UpperBound string `json:"upper_bound"`
 
 	IconUrl string `json:"icon_url"`
-
-	BSCKeyAWSSecretName string `json:"bsc_key_aws_secret_name"`
-	BSCSendAddr         string `json:"bsc_sender"`
-
-	ETHKeyAWSSecretName string `json:"eth_key_aws_secret_name"`
-	ETHSendAddr         string `json:"eth_send_addr"`
 }
 
 func updateCheck(update *UpdateTokenRequest) error {
@@ -279,16 +273,6 @@ func updateCheck(update *UpdateTokenRequest) error {
 	}
 	if len(update.IconUrl) > MaxIconUrlLength {
 		return fmt.Errorf("icon length exceed limit")
-	}
-	if update.ETHSendAddr != "" {
-		if !common.IsHexAddress(update.ETHSendAddr) {
-			return fmt.Errorf("eth_sender_addr is wrong")
-		}
-	}
-	if update.BSCSendAddr != "" {
-		if !common.IsHexAddress(update.BSCSendAddr) {
-			return fmt.Errorf("bse_sender_addr is wrong")
-		}
 	}
 	return nil
 }
@@ -336,18 +320,6 @@ func (admin *Admin) UpdateTokenHandler(w http.ResponseWriter, r *http.Request) {
 	}
 	if updateToken.UpperBound != "" {
 		toUpdate["upper_bound"] = updateToken.UpperBound
-	}
-	if updateToken.BSCKeyAWSSecretName != "" {
-		toUpdate["bsc_key_aws_secret_name"] = updateToken.BSCKeyAWSSecretName
-	}
-	if updateToken.BSCSendAddr != "" {
-		toUpdate["bsc_send_addr"] = strings.ToLower(common.HexToAddress(updateToken.BSCSendAddr).String())
-	}
-	if updateToken.ETHKeyAWSSecretName != "" {
-		toUpdate["eth_key_aws_secret_name"] = updateToken.ETHKeyAWSSecretName
-	}
-	if updateToken.ETHSendAddr != "" {
-		toUpdate["eth_send_addr"] = strings.ToLower(common.HexToAddress(updateToken.ETHSendAddr).String())
 	}
 	if updateToken.IconUrl != "" {
 		toUpdate["icon_url"] = updateToken.IconUrl
