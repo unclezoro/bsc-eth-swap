@@ -128,6 +128,12 @@ func main() {
 	if err != nil {
 		panic(fmt.Sprintf("create swap service error, err=%s", err.Error()))
 	}
+	// update sender addresses
+	err = swapInstance.UpdateSenderAddresses()
+	if err != nil {
+		panic(fmt.Sprintf("update sender addresses error, err=%s", err.Error()))
+	}
+
 	swapInstance.Start()
 
 	signer, err := util.NewHmacSignerFromConfig(config)
