@@ -1,0 +1,63 @@
+{
+  "key_manager_config": {
+    "key_type": "local_private_key",
+    "aws_region": "",
+    "aws_secret_name": "",
+    "local_keys": [
+      {
+        "symbol": "ABC",
+        "bsc_private_key": "b0badc64774a3b0929b8e8f831a5178d5c617a4aa3d00ac5336b5652f961d8a6",
+        "eth_private_key": "b0badc64774a3b0929b8e8f831a5178d5c617a4aa3d00ac5336b5652f961d8a6"
+      },
+      {
+        "symbol": "DEF",
+        "bsc_private_key": "fa173dcd397860ffe7484452b0e1425b7606ac54ad6145af151e2a02b52e7a7f",
+        "eth_private_key": "fa173dcd397860ffe7484452b0e1425b7606ac54ad6145af151e2a02b52e7a7f"
+      }
+    ],
+    "local_hmac_key": "abc123456"
+  },
+  "db_config": {
+    "dialect": "sqlite3",
+    "db_path": ""
+  },
+  "chain_config": {
+    "balance_monitor_interval": 60,
+    "bsc_observer_fetch_interval": 1,
+    "bsc_start_height": 1963823,
+    "bsc_provider": "https://data-seed-prebsc-1-s3.binance.org:8545",
+    "bsc_confirm_num": 2,
+    "bsc_swap_contract_addr": "0x6D4a17A4c362DdD7d6314A41734e0C47c786c343",
+    "bsc_explorer_url": "https://testnet.bscscan.com/tx",
+    "bsc_max_track_retry": 60,
+    "bnb_alert_threshold": "1000000000000000000",
+    "bsc_wait_milli_sec_between_swaps": 100,
+    "eth_observer_fetch_interval": 10,
+    "eth_start_height": 8696282,
+    "eth_provider": "https://rinkeby.infura.io/v3/1c5b38a27f92410cb5feb13b6efb2e14",
+    "eth_confirm_num": 1,
+    "eth_swap_contract_addr": "0x0D91235A3C64d8edb34C3c7085ED357b56770ED4",
+    "eth_explorer_url": "https://rinkeby.etherscan.io/tx",
+    "eth_max_track_retry": 600,
+    "eth_alert_threshold": "1000000000000000000",
+    "eth_wait_milli_sec_between_swaps": 200
+  },
+  "log_config": {
+    "level": "INFO",
+    "filename": "",
+    "max_file_size_in_mb": 100,
+    "max_backups_of_log_files": 1,
+    "max_age_to_retain_log_files_in_days": 30,
+    "use_console_logger": true,
+    "use_file_logger": false,
+    "compress": false
+  },
+  "alert_config": {
+    "telegram_bot_id": "",
+    "telegram_chat_id": "",
+    "block_update_timeout": 10
+  },
+  "admin_config": {
+    "listen_addr": ":8000"
+  }
+}

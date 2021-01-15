@@ -14,7 +14,7 @@ type TgAlerter struct {
 	ChatId string
 }
 
-func InitTgAlerter(cfg *AlertConfig) {
+func InitTgAlerter(cfg AlertConfig) {
 	tgAlerter = TgAlerter{
 		BotId:  cfg.TelegramBotId,
 		ChatId: cfg.TelegramChatId,
@@ -25,7 +25,7 @@ func SendTelegramMessage(msg string) {
 	if tgAlerter.BotId == "" || tgAlerter.ChatId == "" || msg == "" {
 		return
 	}
-
+	msg = fmt.Sprintf("bsc-eth-swap-backend alert: %s", msg)
 	endPoint := fmt.Sprintf("https://api.telegram.org/bot%s/sendMessage", tgAlerter.BotId)
 	formData := url.Values{
 		"chat_id":    {tgAlerter.ChatId},

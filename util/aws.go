@@ -41,4 +41,3 @@ func GetSecret(secretName, region string) (string, error) {
 		return decodedBinarySecret, nil
 	}
 }
-
