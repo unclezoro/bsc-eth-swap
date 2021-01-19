@@ -139,10 +139,7 @@ type Token struct {
 
 	IconUrl string
 
-	BSCSenderAddr       string `gorm:"not null"`
 	BSCERC20Threshold   string `gorm:"not null"`
-
-	ETHSenderAddr       string `gorm:"not null"`
 	ETHERC20Threshold   string `gorm:"not null"`
 }
 

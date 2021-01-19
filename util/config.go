@@ -40,28 +40,55 @@ func (cfg AlertConfig) Validate() {
 }
 
 type KeyManagerConfig struct {
+	TSSCfg TSSConfig `json:"tss_cfg"`
+
 	KeyType       string `json:"key_type"`
 	AWSRegion     string `json:"aws_region"`
 	AWSSecretName string `json:"aws_secret_name"`
 
 	// local keys
-	LocalKeys           []TokenSecretKey `json:"local_keys"`
-	LocalHMACKey        string           `json:"local_hmac_key"`
-	LocalAdminApiKey    string           `json:"local_admin_api_key"`
-	LocalAdminSecretKey string           `json:"local_admin_secret_key"`
+	LocalHMACKey        string `json:"local_hmac_key"`
+	LocalAdminApiKey    string `json:"local_admin_api_key"`
+	LocalAdminSecretKey string `json:"local_admin_secret_key"`
+}
+
+type TSSConfig struct {
+	Endpoint              string `json:"endpoint"`
+	BSCAccountAddr		  string `json:"bsc_account_addr"`
+	ETHAccountAddr        string `json:"eth_account_addr"`
+	P521PrvB64            string `json:"p521_prv_b64"`
+	P521PrvForServerPub   string `json:"p521_prv_for_server_pub"`
+	RSAPrvB64             string `json:"rsa_prv_b64"`
+	RSAPrvB64ForServerPub string `json:"rsa_prv_b64_for_server_pub"`
+}
+
+func (cfg TSSConfig) Validate() {
+	if cfg.Endpoint == "" {
+		panic("missing tss server endpoint")
+	}
+	if cfg.P521PrvB64 == "" {
+		panic("missing p521_prv_b64")
+	}
+	if cfg.P521PrvForServerPub == "" {
+		panic("missing p521_prv_for_server_pub")
+	}
+	if cfg.RSAPrvB64 == "" {
+		panic("missing rsa_prv_b64")
+	}
+	if cfg.RSAPrvB64ForServerPub == "" {
+		panic("missing rsa_prv_b64_for_server_pub")
+	}
 }
 
 type KeyConfig struct {
-	TokenKeys      []TokenSecretKey `json:"token_keys"`
-	HMACKey        string           `json:"hmac_key"`
-	AdminApiKey    string           `json:"admin_api_key"`
-	AdminSecretKey string           `json:"admin_secret_key"`
+	HMACKey        string `json:"hmac_key"`
+	AdminApiKey    string `json:"admin_api_key"`
+	AdminSecretKey string `json:"admin_secret_key"`
 }
 
 func (cfg KeyManagerConfig) Validate() {
-	if cfg.KeyType == common.LocalPrivateKey && len(cfg.LocalKeys) == 0 {
-		panic("missing local private key")
-	}
+	cfg.TSSCfg.Validate()
+
 	if cfg.KeyType == common.LocalPrivateKey && len(cfg.LocalHMACKey) == 0 {
 		panic("missing local hmac key")
 	}

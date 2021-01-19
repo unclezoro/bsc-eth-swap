@@ -6,14 +6,12 @@ const (
 	ObserverMaxBlockNumber = 10000
 	ObserverPruneInterval  = 10 * time.Second
 	ObserverAlertInterval  = 5 * time.Second
-)
 
-const (
 	ChainBSC = "BSC" // binance smart chain
 	ChainETH = "ETH" // ethereum
-)
 
-const (
+	VaultName = "BSC_ETH_SWAP"
+
 	DBDialectMysql   = "mysql"
 	DBDialectSqlite3 = "sqlite3"
 

@@ -4,6 +4,8 @@ go 1.14
 
 require (
 	github.com/aws/aws-sdk-go v1.34.21
+	github.com/binance-chain/tss-crypto-toolkit v0.0.0-20201111032557-5c5994e41c94
+	github.com/binance-chain/tss-zerotrust-sdk v0.0.0-20210118062427-a6b6bc22fd49
 	github.com/btcsuite/btcd v0.20.1-beta // indirect
 	github.com/ethereum/go-ethereum v1.9.12
 	github.com/gorilla/mux v1.8.0

@@ -1,13 +1,13 @@
 package swap
 
 import (
-	"crypto/ecdsa"
 	"math/big"
 	"sync"
 
 	ethcom "github.com/ethereum/go-ethereum/common"
 	"github.com/ethereum/go-ethereum/ethclient"
 	"github.com/jinzhu/gorm"
+	tsssdksecure "github.com/binance-chain/tss-zerotrust-sdk/secure"
 
 	"github.com/binance-chain/bsc-eth-swap/common"
 	"github.com/binance-chain/bsc-eth-swap/util"
@@ -39,8 +39,13 @@ type Swapper struct {
 	HMACKey                 string
 	Config                  *util.Config
 	TokenInstances          map[string]*TokenInstance
+	TSSClientSecureConfig   *tsssdksecure.ClientSecureConfig
 	ETHClient               *ethclient.Client
 	BSCClient               *ethclient.Client
+	ETHChainID              int64
+	BSCChainID				int64
+	ETHTxSender             ethcom.Address
+	BSCTxSender             ethcom.Address
 	BSCContractAddrToSymbol map[string]string
 	ETHContractAddrToSymbol map[string]string
 	NewTokenSignal          chan string
@@ -54,19 +59,8 @@ type TokenInstance struct {
 	UpperBound  *big.Int
 	CloseSignal chan bool
 
-	BSCPrivateKey        *ecdsa.PrivateKey
-	BSCTxSender          ethcom.Address
 	BSCTokenContractAddr ethcom.Address
 	BSCERC20Threshold    *big.Int
-	ETHPrivateKey        *ecdsa.PrivateKey
 	ETHTokenContractAddr ethcom.Address
-	ETHTxSender          ethcom.Address
 	ETHERC20Threshold    *big.Int
-}
-
-type TokenKey struct {
-	BSCPrivateKey *ecdsa.PrivateKey
-	BSCPublicKey  *ecdsa.PublicKey
-	ETHPrivateKey *ecdsa.PrivateKey
-	ETHPublicKey  *ecdsa.PublicKey
 }

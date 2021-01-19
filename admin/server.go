@@ -33,7 +33,7 @@ var isAlphaNumFunc = regexp.MustCompile(`^[[:alnum:]]+$`).MatchString
 type Admin struct {
 	DB *gorm.DB
 
-	Config *util.Config
+	cfg *util.Config
 
 	HmacSigner *util.HmacSigner
 	Swapper    *swap.Swapper
@@ -45,7 +45,7 @@ type Admin struct {
 func NewAdmin(config *util.Config, db *gorm.DB, signer *util.HmacSigner, swapper *swap.Swapper, bscExecutor executor.Executor, ethExecutor executor.Executor) *Admin {
 	return &Admin{
 		DB:          db,
-		Config:      config,
+		cfg:         config,
 		HmacSigner:  signer,
 		Swapper:     swapper,
 		BSCExecutor: bscExecutor,
@@ -66,6 +66,9 @@ type NewTokenRequest struct {
 
 	BSCERC20Threshold string `json:"bsc_erc20_threshold"`
 	ETHERC20Threshold string `json:"eth_erc20_threshold"`
+
+	TSSKeyThreashold uint32 `json:"tss_key_threashold"`
+	TSSKeyNodeCount  uint32 `json:"tss_key_node_count"`
 }
 
 func (admin *Admin) AddToken(w http.ResponseWriter, r *http.Request) {
@@ -132,18 +135,6 @@ func (admin *Admin) AddToken(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	tokenKeys, err := swap.GetAllTokenKeys(admin.Config)
-	if err != nil {
-		http.Error(w, fmt.Sprintf("failed to get token secret keys: %s", err.Error()), http.StatusInternalServerError)
-		return
-	}
-
-	tokenKey, ok := tokenKeys[newToken.Symbol]
-	if !ok {
-		http.Error(w, fmt.Sprintf("missing token key for %s", newToken.Symbol), http.StatusBadRequest)
-		return
-	}
-
 	tokenModel := model.Token{
 		Symbol:               newToken.Symbol,
 		Name:                 newToken.Name,
@@ -153,9 +144,7 @@ func (admin *Admin) AddToken(w http.ResponseWriter, r *http.Request) {
 		LowBound:             newToken.LowerBound,
 		UpperBound:           newToken.UpperBound,
 		IconUrl:              newToken.IconUrl,
-		BSCSenderAddr:        strings.ToLower(swap.GetAddress(tokenKey.BSCPublicKey).String()),
 		BSCERC20Threshold:    newToken.BSCERC20Threshold,
-		ETHSenderAddr:        strings.ToLower(swap.GetAddress(tokenKey.ETHPublicKey).String()),
 		ETHERC20Threshold:    newToken.ETHERC20Threshold,
 		Available:            false,
 	}
@@ -171,18 +160,6 @@ func (admin *Admin) AddToken(w http.ResponseWriter, r *http.Request) {
 	err = admin.DB.Where("symbol = ?", tokenModel.Symbol).First(&token).Error
 	if err != nil {
 		http.Error(w, fmt.Sprintf("token %s is not found", tokenModel.Symbol), http.StatusBadRequest)
-		return
-	}
-
-	// add token in swapper
-	err = admin.Swapper.AddToken(&token, tokenKey)
-	if err != nil {
-		dbErr := admin.DB.Where("symbol = ?", tokenModel.Symbol).Unscoped().Delete(&model.Token{}).Error
-		if dbErr != nil {
-			http.Error(w, fmt.Sprintf("delete token error, err=%s", dbErr.Error()), http.StatusInternalServerError)
-			return
-		}
-		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
 	}
 
@@ -338,6 +315,16 @@ func (admin *Admin) UpdateTokenHandler(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, fmt.Sprintf("token %s is not found", updateToken.Symbol), http.StatusBadRequest)
 		return
 	}
+
+	if updateToken.Available {
+		// add token in swapper
+		err = admin.Swapper.AddToken(&token)
+		if err != nil {
+			http.Error(w, err.Error(), http.StatusInternalServerError)
+			return
+		}
+	}
+
 	jsonBytes, err := json.MarshalIndent(token, "", "  ")
 	if err != nil {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
@@ -476,8 +463,8 @@ func (admin *Admin) Serve() {
 	router.HandleFunc("/delete_token", admin.DeleteTokenHandler).Methods("DELETE")
 
 	listenAddr := DefaultListenAddr
-	if admin.Config.AdminConfig.ListenAddr != "" {
-		listenAddr = admin.Config.AdminConfig.ListenAddr
+	if admin.cfg.AdminConfig.ListenAddr != "" {
+		listenAddr = admin.cfg.AdminConfig.ListenAddr
 	}
 	srv := &http.Server{
 		Handler:      router,
