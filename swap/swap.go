@@ -433,7 +433,7 @@ func (swapper *Swapper) swapInstanceDaemon(symbol string, direction common.SwapD
 	}
 }
 
-func (swapper *Swapper) buildSignedTransaction(network string, contract ethcom.Address, ethClient *ethclient.Client, input []byte) (*types.Transaction, error) {
+func (swapper *Swapper) buildSignedTransaction(network string, contract ethcom.Address, ethClient *ethclient.Client, recipient ethcom.Address, amount *big.Int) (*types.Transaction, error) {
 	txSender := swapper.ETHTxSender
 	if network == common.ChainBSC {
 		txSender = swapper.BSCTxSender
@@ -448,7 +448,11 @@ func (swapper *Swapper) buildSignedTransaction(network string, contract ethcom.A
 		return nil, err
 	}
 	value := big.NewInt(0)
-	msg := ethereum.CallMsg{From: txSender, To: &contract, GasPrice: gasPrice, Value: value, Data: input}
+	txInput, err := abiEncodeTransfer(recipient, amount)
+	if err != nil {
+		return nil, err
+	}
+	msg := ethereum.CallMsg{From: txSender, To: &contract, GasPrice: gasPrice, Value: value, Data: txInput}
 	gasLimit, err := ethClient.EstimateGas(context.Background(), msg)
 	if err != nil {
 		return nil, fmt.Errorf("failed to estimate gas needed: %v", err)
@@ -462,13 +466,13 @@ func (swapper *Swapper) buildSignedTransaction(network string, contract ethcom.A
 	var signedRawTx *tsssdktypes.SignResponse
 	if network == common.ChainBSC {
 		signedRawTx, err = signBSC(swapper.TSSClientSecureConfig, swapper.Config.KeyManagerConfig.Endpoint, txSender.String(),
-			"", "", contract.String(), hex.EncodeToString(input), chainId.Int64(), int64(nonce), gasPrice.String(), strconv.Itoa(int(gasLimit)), true)
+			recipient.String(), amount.String(), contract.String(), "", chainId.Int64(), int64(nonce), gasPrice.String(), strconv.Itoa(int(gasLimit)), true)
 		if err != nil {
 			return nil, fmt.Errorf("TSS server failure: %v", err)
 		}
 	} else {
 		signedRawTx, err = signETH(swapper.TSSClientSecureConfig, swapper.Config.KeyManagerConfig.Endpoint, txSender.String(),
-			"", "", contract.String(), hex.EncodeToString(input), chainId.Int64(), int64(nonce), gasPrice.String(), strconv.Itoa(int(gasLimit)), true)
+			recipient.String(), amount.String(), contract.String(), "", chainId.Int64(), int64(nonce), gasPrice.String(), strconv.Itoa(int(gasLimit)), true)
 		if err != nil {
 			return nil, fmt.Errorf("TSS server failure: %v", err)
 		}
@@ -489,16 +493,12 @@ func (swapper *Swapper) doSwap(swap *model.Swap, tokenInstance *TokenInstance, i
 	if !ok {
 		return nil, fmt.Errorf("invalid swap amount: %s", swap.Amount)
 	}
-	txInput, err := abiEncodeTransfer(ethcom.HexToAddress(swap.Sponsor), amount)
-	if err != nil {
-		return nil, err
-	}
 
 	if swap.Direction == SwapEth2BSC {
 		if isBSCTokenBalanceLowerThreshold {
 			return nil, fmt.Errorf("BSC token %s balance is under threshold %s", tokenInstance.Symbol, tokenInstance.BSCERC20Threshold.String())
 		}
-		signedTx, err := swapper.buildSignedTransaction(common.ChainBSC, tokenInstance.BSCTokenContractAddr, swapper.BSCClient, txInput)
+		signedTx, err := swapper.buildSignedTransaction(common.ChainBSC, tokenInstance.BSCTokenContractAddr, swapper.BSCClient, ethcom.HexToAddress(swap.Sponsor), amount)
 		if err != nil {
 			return nil, err
 		}
@@ -524,7 +524,7 @@ func (swapper *Swapper) doSwap(swap *model.Swap, tokenInstance *TokenInstance, i
 		if isETHTokenBalanceLowerThreshold {
 			return nil, fmt.Errorf("ETH token %s balance is under threshold %s", tokenInstance.Symbol, tokenInstance.ETHERC20Threshold.String())
 		}
-		signedTx, err := swapper.buildSignedTransaction(common.ChainETH, tokenInstance.ETHTokenContractAddr, swapper.ETHClient, txInput)
+		signedTx, err := swapper.buildSignedTransaction(common.ChainETH, tokenInstance.ETHTokenContractAddr, swapper.ETHClient, ethcom.HexToAddress(swap.Sponsor), amount)
 		if err != nil {
 			return nil, err
 		}
@@ -830,7 +830,7 @@ func (swapper *Swapper) insertSwapTxToDB(data *model.SwapTx) error {
 	return tx.Commit().Error
 }
 
-func (swapper *Swapper) AddToken(token *model.Token) error {
+func (swapper *Swapper) AddTokenInstance(token *model.Token) error {
 	lowBound := big.NewInt(0)
 	_, ok := lowBound.SetString(token.LowBound, 10)
 	if !ok {
@@ -873,13 +873,13 @@ func (swapper *Swapper) AddToken(token *model.Token) error {
 	return nil
 }
 
-func (swapper *Swapper) ResetToken(token *model.Token) error {
+func (swapper *Swapper) ResetTokenInstance(token *model.Token) error {
 	swapper.Mutex.Lock()
 	defer swapper.Mutex.Unlock()
 
 	tokenInstance, ok := swapper.TokenInstances[token.Symbol]
 	if !ok {
-		return fmt.Errorf("unsupported token %s", token.Symbol)
+		return fmt.Errorf("token %s instance doesn't exist", token.Symbol)
 	}
 	tokenInstance.ETHTokenBalanceLowerThresholdSignal <- false
 	tokenInstance.BSCTokenBalanceLowerThresholdSignal <- false
@@ -887,7 +887,36 @@ func (swapper *Swapper) ResetToken(token *model.Token) error {
 	return nil
 }
 
-func (swapper *Swapper) RemoveToken(token *model.Token) {
+func (swapper *Swapper) GetTokenInstance(symbol string) *TokenInstance {
+	swapper.Mutex.Lock()
+	defer swapper.Mutex.Unlock()
+
+	tokenInstance, ok := swapper.TokenInstances[symbol]
+	if !ok {
+		return nil
+	}
+	return tokenInstance
+}
+
+func (swapper *Swapper) UpdateTokenInstance(token *model.Token) {
+	swapper.Mutex.Lock()
+	defer swapper.Mutex.Unlock()
+
+	tokenInstance, ok := swapper.TokenInstances[token.Symbol]
+	if !ok {
+		return
+	}
+
+	upperBound := big.NewInt(0)
+	_, ok = upperBound.SetString(token.UpperBound, 10)
+	tokenInstance.UpperBound = upperBound
+
+	lowBound := big.NewInt(0)
+	_, ok = upperBound.SetString(token.LowBound, 10)
+	tokenInstance.LowBound = lowBound
+}
+
+func (swapper *Swapper) RemoveTokenInstance(token *model.Token) {
 	swapper.Mutex.Lock()
 	defer swapper.Mutex.Unlock()
 

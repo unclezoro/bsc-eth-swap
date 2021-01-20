@@ -66,9 +66,6 @@ type NewTokenRequest struct {
 
 	BSCERC20Threshold string `json:"bsc_erc20_threshold"`
 	ETHERC20Threshold string `json:"eth_erc20_threshold"`
-
-	TSSKeyThreshold uint32 `json:"tss_key_threshold"`
-	TSSKeyNodeCount uint32 `json:"tss_key_node_count"`
 }
 
 func (admin *Admin) AddToken(w http.ResponseWriter, r *http.Request) {
@@ -212,7 +209,7 @@ func (admin *Admin) ResetToken(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	err = admin.Swapper.ResetToken(&token)
+	err = admin.Swapper.ResetTokenInstance(&token)
 	if err != nil {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
@@ -371,13 +368,16 @@ func (admin *Admin) UpdateTokenHandler(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	if updateToken.Available {
+	tokenInstance := admin.Swapper.GetTokenInstance(updateToken.Symbol)
+	if tokenInstance == nil && updateToken.Available {
 		// add token in swapper
-		err = admin.Swapper.AddToken(&token)
+		err = admin.Swapper.AddTokenInstance(&token)
 		if err != nil {
 			http.Error(w, err.Error(), http.StatusInternalServerError)
 			return
 		}
+	} else if tokenInstance != nil {
+		admin.Swapper.UpdateTokenInstance(&token)
 	}
 
 	jsonBytes, err := json.MarshalIndent(token, "", "  ")
@@ -464,7 +464,7 @@ func (admin *Admin) DeleteTokenHandler(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// remove token in swapper
-	admin.Swapper.RemoveToken(&token)
+	admin.Swapper.RemoveTokenInstance(&token)
 
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(http.StatusOK)
