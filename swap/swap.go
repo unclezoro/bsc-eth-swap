@@ -43,7 +43,7 @@ func NewSwapper(db *gorm.DB, cfg *util.Config, bscClient, ethClient *ethclient.C
 		ethContractAddrToSymbol[token.ETHTokenContractAddr] = token.Symbol
 	}
 
-	hmacKey, err := GetHMACKey(cfg)
+	keyConfig, err := GetKeyConfig(cfg)
 	if err != nil {
 		return nil, err
 
@@ -63,14 +63,14 @@ func NewSwapper(db *gorm.DB, cfg *util.Config, bscClient, ethClient *ethclient.C
 	swapper := &Swapper{
 		DB:                      db,
 		Config:                  cfg,
-		HMACKey:                 hmacKey,
-		TSSClientSecureConfig:   NewClientSecureConfig(cfg),
+		HMACKey:                 keyConfig.HMACKey,
+		TSSClientSecureConfig:   NewClientSecureConfig(keyConfig),
 		BSCClient:               bscClient,
 		ETHClient:               ethClient,
 		BSCChainID:              bscChainID.Int64(),
 		ETHChainID:              ethChainID.Int64(),
-		BSCTxSender:             ethcom.HexToAddress(cfg.KeyManagerConfig.TSSCfg.BSCAccountAddr),
-		ETHTxSender:             ethcom.HexToAddress(cfg.KeyManagerConfig.TSSCfg.ETHAccountAddr),
+		BSCTxSender:             ethcom.HexToAddress(cfg.KeyManagerConfig.BSCAccountAddr),
+		ETHTxSender:             ethcom.HexToAddress(cfg.KeyManagerConfig.ETHAccountAddr),
 		TokenInstances:          tokenInstances,
 		BSCContractAddrToSymbol: bscContractAddrToSymbol,
 		ETHContractAddrToSymbol: ethContractAddrToSymbol,
@@ -298,12 +298,18 @@ func (swapper *Swapper) createSwapDaemon() {
 
 func (swapper *Swapper) swapInstanceDaemon(symbol string, direction common.SwapDirection, tokenInstance *TokenInstance) {
 	util.Logger.Infof("start swap daemon for %s, direction %s", symbol, direction)
+	isETHTokenBalanceLowerThreshold := tokenInstance.IsETHTokenBalanceLowerThreshold
+	isBSCTokenBalanceLowerThreshold := tokenInstance.IsBSCTokenBalanceLowerThreshold
 	for {
 		select {
 		case <-tokenInstance.CloseSignal:
 			util.Logger.Infof("close swap daemon for %s, direction %s", symbol, direction)
 			util.SendTelegramMessage(fmt.Sprintf("close swap daemon for %s, direction %s", symbol, direction))
 			return
+		case newValue := <-tokenInstance.ETHTokenBalanceLowerThresholdSignal:
+			isETHTokenBalanceLowerThreshold = newValue
+		case newValue := <-tokenInstance.BSCTokenBalanceLowerThresholdSignal:
+			isBSCTokenBalanceLowerThreshold = newValue
 		default:
 		}
 
@@ -371,7 +377,7 @@ func (swapper *Swapper) swapInstanceDaemon(symbol string, direction common.SwapD
 			}
 
 			util.Logger.Infof("do swap token %s , direction %s, sponsor: %s, amount %s, decimals %d,", symbol, direction, swap.Sponsor, swap.Amount, swap.Decimals)
-			swapTx, swapErr := swapper.doSwap(&swap, tokenInstance)
+			swapTx, swapErr := swapper.doSwap(&swap, tokenInstance, isETHTokenBalanceLowerThreshold, isBSCTokenBalanceLowerThreshold)
 
 			writeDBErr = func() error {
 				tx := swapper.DB.Begin()
@@ -455,13 +461,13 @@ func (swapper *Swapper) buildSignedTransaction(network string, contract ethcom.A
 
 	var signedRawTx *tsssdktypes.SignResponse
 	if network == common.ChainBSC {
-		signedRawTx, err = signBSC(swapper.TSSClientSecureConfig, swapper.Config.KeyManagerConfig.TSSCfg.Endpoint, txSender.String(),
+		signedRawTx, err = signBSC(swapper.TSSClientSecureConfig, swapper.Config.KeyManagerConfig.Endpoint, txSender.String(),
 			"", "", contract.String(), hex.EncodeToString(input), chainId.Int64(), int64(nonce), gasPrice.String(), strconv.Itoa(int(gasLimit)), true)
 		if err != nil {
 			return nil, fmt.Errorf("TSS server failure: %v", err)
 		}
 	} else {
-		signedRawTx, err = signETH(swapper.TSSClientSecureConfig, swapper.Config.KeyManagerConfig.TSSCfg.Endpoint, txSender.String(),
+		signedRawTx, err = signETH(swapper.TSSClientSecureConfig, swapper.Config.KeyManagerConfig.Endpoint, txSender.String(),
 			"", "", contract.String(), hex.EncodeToString(input), chainId.Int64(), int64(nonce), gasPrice.String(), strconv.Itoa(int(gasLimit)), true)
 		if err != nil {
 			return nil, fmt.Errorf("TSS server failure: %v", err)
@@ -477,7 +483,7 @@ func (swapper *Swapper) buildSignedTransaction(network string, contract ethcom.A
 	return &signedTx, nil
 }
 
-func (swapper *Swapper) doSwap(swap *model.Swap, tokenInstance *TokenInstance) (*model.SwapTx, error) {
+func (swapper *Swapper) doSwap(swap *model.Swap, tokenInstance *TokenInstance, isBSCTokenBalanceLowerThreshold, isETHTokenBalanceLowerThreshold bool) (*model.SwapTx, error) {
 	amount := big.NewInt(0)
 	_, ok := amount.SetString(swap.Amount, 10)
 	if !ok {
@@ -489,6 +495,9 @@ func (swapper *Swapper) doSwap(swap *model.Swap, tokenInstance *TokenInstance) (
 	}
 
 	if swap.Direction == SwapEth2BSC {
+		if isBSCTokenBalanceLowerThreshold {
+			return nil, fmt.Errorf("BSC token %s balance is under threshold %s", tokenInstance.Symbol, tokenInstance.BSCERC20Threshold.String())
+		}
 		signedTx, err := swapper.buildSignedTransaction(common.ChainBSC, tokenInstance.BSCTokenContractAddr, swapper.BSCClient, txInput)
 		if err != nil {
 			return nil, err
@@ -512,6 +521,9 @@ func (swapper *Swapper) doSwap(swap *model.Swap, tokenInstance *TokenInstance) (
 		util.Logger.Infof("Send transaction to BSC, %s/%s", swapper.Config.ChainConfig.BSCExplorerUrl, signedTx.Hash().String())
 		return swapTx, nil
 	} else {
+		if isETHTokenBalanceLowerThreshold {
+			return nil, fmt.Errorf("ETH token %s balance is under threshold %s", tokenInstance.Symbol, tokenInstance.ETHERC20Threshold.String())
+		}
 		signedTx, err := swapper.buildSignedTransaction(common.ChainETH, tokenInstance.ETHTokenContractAddr, swapper.ETHClient, txInput)
 		if err != nil {
 			return nil, err
@@ -754,11 +766,15 @@ func (swapper *Swapper) alertDaemon() {
 				util.SendTelegramMessage(fmt.Sprintf("symbol %s, failed to query bcs erc20 balance: %s", symbol, err.Error()))
 			} else {
 				if bscErc20Balance.Cmp(tokenInstance.BSCERC20Threshold) <= 0 {
+					tokenInstance.BSCTokenBalanceLowerThresholdSignal <- true
 					util.Logger.Infof(fmt.Sprintf("symbol %s, bsc address %s, erc20 contract addr %s, bsc erc20 balance %s is less than threshold %s",
 						symbol, swapper.BSCTxSender.String(), tokenInstance.BSCTokenContractAddr.String(), bscErc20Balance.String(), tokenInstance.BSCERC20Threshold.String()))
 					util.SendTelegramMessage(fmt.Sprintf("symbol %s, bsc address %s, erc20 contract addr %s, bsc erc20 balance %s is less than threshold %s",
 						symbol, swapper.BSCTxSender.String(), tokenInstance.BSCTokenContractAddr.String(), bscErc20Balance.String(), tokenInstance.BSCERC20Threshold.String()))
+				} else if bscErc20Balance.Cmp(big.NewInt(1).Mul(tokenInstance.BSCERC20Threshold, big.NewInt(2))) >= 0 {
+					tokenInstance.BSCTokenBalanceLowerThresholdSignal <- false
 				}
+
 			}
 
 			ethERC20, err := erc20.NewErc20(tokenInstance.ETHTokenContractAddr, swapper.ETHClient)
@@ -773,10 +789,13 @@ func (swapper *Swapper) alertDaemon() {
 				util.SendTelegramMessage(fmt.Sprintf("symbol %s, failed to query eth erc20 balance: %s", symbol, err.Error()))
 			} else {
 				if ethErc20Balance.Cmp(tokenInstance.ETHERC20Threshold) <= 0 {
+					tokenInstance.ETHTokenBalanceLowerThresholdSignal <- true
 					util.Logger.Infof(fmt.Sprintf("symbol %s, eth address %s, erc20 contract addr %s, eth erc20 balance %s is less than threshold %s",
 						symbol, swapper.ETHTxSender.String(), tokenInstance.ETHTokenContractAddr.String(), ethErc20Balance.String(), tokenInstance.ETHERC20Threshold.String()))
 					util.SendTelegramMessage(fmt.Sprintf("symbol %s, eth address %s, erc20 contract addr %s, eth erc20 balance %s is less than threshold %s",
 						symbol, swapper.ETHTxSender.String(), tokenInstance.ETHTokenContractAddr.String(), ethErc20Balance.String(), tokenInstance.ETHERC20Threshold.String()))
+				} else if ethErc20Balance.Cmp(big.NewInt(1).Mul(tokenInstance.ETHERC20Threshold, big.NewInt(2))) >= 0 {
+					tokenInstance.ETHTokenBalanceLowerThresholdSignal <- false
 				}
 			}
 		}
@@ -832,10 +851,14 @@ func (swapper *Swapper) AddToken(token *model.Token) error {
 	swapper.Mutex.Lock()
 	defer swapper.Mutex.Unlock()
 	swapper.TokenInstances[token.Symbol] = &TokenInstance{
-		Symbol:               token.Symbol,
-		Name:                 token.Name,
-		Decimals:             token.Decimals,
-		CloseSignal:          make(chan bool),
+		Symbol:   token.Symbol,
+		Name:     token.Name,
+		Decimals: token.Decimals,
+
+		CloseSignal:                         make(chan bool),
+		ETHTokenBalanceLowerThresholdSignal: make(chan bool),
+		BSCTokenBalanceLowerThresholdSignal: make(chan bool),
+
 		LowBound:             lowBound,
 		UpperBound:           upperBound,
 		BSCTokenContractAddr: ethcom.HexToAddress(token.BSCTokenContractAddr),
@@ -850,6 +873,20 @@ func (swapper *Swapper) AddToken(token *model.Token) error {
 	return nil
 }
 
+func (swapper *Swapper) ResetToken(token *model.Token) error {
+	swapper.Mutex.Lock()
+	defer swapper.Mutex.Unlock()
+
+	tokenInstance, ok := swapper.TokenInstances[token.Symbol]
+	if !ok {
+		return fmt.Errorf("unsupported token %s", token.Symbol)
+	}
+	tokenInstance.ETHTokenBalanceLowerThresholdSignal <- false
+	tokenInstance.BSCTokenBalanceLowerThresholdSignal <- false
+
+	return nil
+}
+
 func (swapper *Swapper) RemoveToken(token *model.Token) {
 	swapper.Mutex.Lock()
 	defer swapper.Mutex.Unlock()
@@ -860,6 +897,8 @@ func (swapper *Swapper) RemoveToken(token *model.Token) {
 		return
 	}
 	close(tokenInstance.CloseSignal)
+	close(tokenInstance.ETHTokenBalanceLowerThresholdSignal)
+	close(tokenInstance.BSCTokenBalanceLowerThresholdSignal)
 
 	delete(swapper.TokenInstances, token.Symbol)
 	delete(swapper.BSCContractAddrToSymbol, strings.ToLower(token.BSCTokenContractAddr))

@@ -40,54 +40,38 @@ func (cfg AlertConfig) Validate() {
 }
 
 type KeyManagerConfig struct {
-	TSSCfg TSSConfig `json:"tss_cfg"`
+	Endpoint       string `json:"endpoint"`
+	BSCAccountAddr string `json:"bsc_account_addr"`
+	ETHAccountAddr string `json:"eth_account_addr"`
 
 	KeyType       string `json:"key_type"`
 	AWSRegion     string `json:"aws_region"`
 	AWSSecretName string `json:"aws_secret_name"`
 
 	// local keys
-	LocalHMACKey        string `json:"local_hmac_key"`
-	LocalAdminApiKey    string `json:"local_admin_api_key"`
-	LocalAdminSecretKey string `json:"local_admin_secret_key"`
+	LocalHMACKey               string `json:"local_hmac_key"`
+	LocalAdminApiKey           string `json:"local_admin_api_key"`
+	LocalAdminSecretKey        string `json:"local_admin_secret_key"`
+	LocalP521PrvB64            string `json:"local_p521_prv_b64"`
+	LocalP521PrvForServerPub   string `json:"local_p521_prv_for_server_pub"`
+	LocalRSAPrvB64             string `json:"local_rsa_prv_b64"`
+	LocalRSAPrvB64ForServerPub string `json:"local_rsa_prv_b64_for_server_pub"`
 }
 
-type TSSConfig struct {
-	Endpoint              string `json:"endpoint"`
-	BSCAccountAddr		  string `json:"bsc_account_addr"`
-	ETHAccountAddr        string `json:"eth_account_addr"`
+type KeyConfig struct {
+	HMACKey               string `json:"hmac_key"`
+	AdminApiKey           string `json:"admin_api_key"`
+	AdminSecretKey        string `json:"admin_secret_key"`
 	P521PrvB64            string `json:"p521_prv_b64"`
 	P521PrvForServerPub   string `json:"p521_prv_for_server_pub"`
 	RSAPrvB64             string `json:"rsa_prv_b64"`
 	RSAPrvB64ForServerPub string `json:"rsa_prv_b64_for_server_pub"`
 }
 
-func (cfg TSSConfig) Validate() {
+func (cfg KeyManagerConfig) Validate() {
 	if cfg.Endpoint == "" {
 		panic("missing tss server endpoint")
 	}
-	if cfg.P521PrvB64 == "" {
-		panic("missing p521_prv_b64")
-	}
-	if cfg.P521PrvForServerPub == "" {
-		panic("missing p521_prv_for_server_pub")
-	}
-	if cfg.RSAPrvB64 == "" {
-		panic("missing rsa_prv_b64")
-	}
-	if cfg.RSAPrvB64ForServerPub == "" {
-		panic("missing rsa_prv_b64_for_server_pub")
-	}
-}
-
-type KeyConfig struct {
-	HMACKey        string `json:"hmac_key"`
-	AdminApiKey    string `json:"admin_api_key"`
-	AdminSecretKey string `json:"admin_secret_key"`
-}
-
-func (cfg KeyManagerConfig) Validate() {
-	cfg.TSSCfg.Validate()
 
 	if cfg.KeyType == common.LocalPrivateKey && len(cfg.LocalHMACKey) == 0 {
 		panic("missing local hmac key")
@@ -97,6 +81,22 @@ func (cfg KeyManagerConfig) Validate() {
 	}
 	if cfg.KeyType == common.LocalPrivateKey && len(cfg.LocalAdminSecretKey) == 0 {
 		panic("missing local admin secret key")
+	}
+
+	if cfg.KeyType == common.LocalPrivateKey && len(cfg.LocalP521PrvB64) == 0 {
+		panic("missing local p521_prv_b64")
+	}
+
+	if cfg.KeyType == common.LocalPrivateKey && len(cfg.LocalP521PrvForServerPub) == 0 {
+		panic("missing local p521_prv_for_server_pub")
+	}
+
+	if cfg.KeyType == common.LocalPrivateKey && len(cfg.LocalRSAPrvB64) == 0 {
+		panic("missing local rsa_prv_b64")
+	}
+
+	if cfg.KeyType == common.LocalPrivateKey && len(cfg.LocalRSAPrvB64ForServerPub) == 0 {
+		panic("missing local rsa_prv_b64_for_server_pub")
 	}
 
 	if cfg.KeyType == common.AWSPrivateKey && (cfg.AWSRegion == "" || cfg.AWSSecretName == "") {

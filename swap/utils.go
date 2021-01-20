@@ -48,37 +48,51 @@ func buildTokenInstance(tokens []model.Token, cfg *util.Config) (map[string]*Tok
 		ethERC20Threshold.SetString(token.ETHERC20Threshold, 10)
 
 		tokenInstances[token.Symbol] = &TokenInstance{
-			Symbol:               token.Symbol,
-			Name:                 token.Name,
-			Decimals:             token.Decimals,
-			LowBound:             lowBound,
-			UpperBound:           upperBound,
-			CloseSignal:          make(chan bool),
-			BSCTokenContractAddr: ethcom.HexToAddress(token.BSCTokenContractAddr),
-			BSCERC20Threshold:    bscERC20Threshold,
-			ETHTokenContractAddr: ethcom.HexToAddress(token.ETHTokenContractAddr),
-			ETHERC20Threshold:    ethERC20Threshold,
+			Symbol:     token.Symbol,
+			Name:       token.Name,
+			Decimals:   token.Decimals,
+			LowBound:   lowBound,
+			UpperBound: upperBound,
+
+			CloseSignal:                         make(chan bool),
+			ETHTokenBalanceLowerThresholdSignal: make(chan bool),
+			BSCTokenBalanceLowerThresholdSignal: make(chan bool),
+
+			IsETHTokenBalanceLowerThreshold: token.IsETHBalanceLowerThanThreshold,
+			IsBSCTokenBalanceLowerThreshold: token.IsBSCBalanceLowerThanThreshold,
+			BSCTokenContractAddr:            ethcom.HexToAddress(token.BSCTokenContractAddr),
+			BSCERC20Threshold:               bscERC20Threshold,
+			ETHTokenContractAddr:            ethcom.HexToAddress(token.ETHTokenContractAddr),
+			ETHERC20Threshold:               ethERC20Threshold,
 		}
 	}
 
 	return tokenInstances, nil
 }
 
-func GetHMACKey(cfg *util.Config) (string, error) {
+func GetKeyConfig(cfg *util.Config) (*util.KeyConfig, error) {
 	if cfg.KeyManagerConfig.KeyType == common.AWSPrivateKey {
 		result, err := util.GetSecret(cfg.KeyManagerConfig.AWSSecretName, cfg.KeyManagerConfig.AWSRegion)
 		if err != nil {
-			return "", err
+			return nil, err
 		}
 
 		keyConfig := util.KeyConfig{}
 		err = json.Unmarshal([]byte(result), &keyConfig)
 		if err != nil {
-			return "", err
+			return nil, err
 		}
-		return keyConfig.HMACKey, nil
+		return &keyConfig, nil
 	} else {
-		return cfg.KeyManagerConfig.LocalHMACKey, nil
+		return &util.KeyConfig{
+			HMACKey:               cfg.KeyManagerConfig.LocalHMACKey,
+			AdminApiKey:           cfg.KeyManagerConfig.LocalAdminApiKey,
+			AdminSecretKey:        cfg.KeyManagerConfig.LocalAdminSecretKey,
+			P521PrvB64:            cfg.KeyManagerConfig.LocalP521PrvB64,
+			P521PrvForServerPub:   cfg.KeyManagerConfig.LocalP521PrvForServerPub,
+			RSAPrvB64:             cfg.KeyManagerConfig.LocalRSAPrvB64,
+			RSAPrvB64ForServerPub: cfg.KeyManagerConfig.LocalRSAPrvB64ForServerPub,
+		}, nil
 	}
 }
 
@@ -128,8 +142,8 @@ func BuildKeys(privateKeyStr string) (*ecdsa.PrivateKey, *ecdsa.PublicKey, error
 	return priKey, publicKey, nil
 }
 
-func NewClientSecureConfig(cfg *util.Config) *tsssdksecure.ClientSecureConfig {
-	rsaPrvBz, err := base64.StdEncoding.DecodeString(cfg.KeyManagerConfig.TSSCfg.RSAPrvB64)
+func NewClientSecureConfig(keyCfg *util.KeyConfig) *tsssdksecure.ClientSecureConfig {
+	rsaPrvBz, err := base64.StdEncoding.DecodeString(keyCfg.RSAPrvB64)
 	if err != nil {
 		panic(err.Error())
 	}
@@ -139,7 +153,7 @@ func NewClientSecureConfig(cfg *util.Config) *tsssdksecure.ClientSecureConfig {
 		panic(err.Error())
 	}
 
-	p521PrvBz, err := base64.StdEncoding.DecodeString(cfg.KeyManagerConfig.TSSCfg.P521PrvB64)
+	p521PrvBz, err := base64.StdEncoding.DecodeString(keyCfg.P521PrvB64)
 	if err != nil {
 		panic(err.Error())
 	}
@@ -149,7 +163,7 @@ func NewClientSecureConfig(cfg *util.Config) *tsssdksecure.ClientSecureConfig {
 		panic(err.Error())
 	}
 
-	peerRsaPubBz, err := base64.StdEncoding.DecodeString(cfg.KeyManagerConfig.TSSCfg.RSAPrvB64ForServerPub)
+	peerRsaPubBz, err := base64.StdEncoding.DecodeString(keyCfg.RSAPrvB64ForServerPub)
 	if err != nil {
 		panic(err.Error())
 	}
@@ -159,7 +173,7 @@ func NewClientSecureConfig(cfg *util.Config) *tsssdksecure.ClientSecureConfig {
 		panic(err.Error())
 	}
 
-	peerP521PubBz, err := base64.StdEncoding.DecodeString(cfg.KeyManagerConfig.TSSCfg.P521PrvForServerPub)
+	peerP521PubBz, err := base64.StdEncoding.DecodeString(keyCfg.P521PrvForServerPub)
 	if err != nil {
 		panic(err.Error())
 	}

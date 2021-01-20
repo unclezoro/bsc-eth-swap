@@ -4,10 +4,10 @@ import (
 	"math/big"
 	"sync"
 
+	tsssdksecure "github.com/binance-chain/tss-zerotrust-sdk/secure"
 	ethcom "github.com/ethereum/go-ethereum/common"
 	"github.com/ethereum/go-ethereum/ethclient"
 	"github.com/jinzhu/gorm"
-	tsssdksecure "github.com/binance-chain/tss-zerotrust-sdk/secure"
 
 	"github.com/binance-chain/bsc-eth-swap/common"
 	"github.com/binance-chain/bsc-eth-swap/util"
@@ -43,7 +43,7 @@ type Swapper struct {
 	ETHClient               *ethclient.Client
 	BSCClient               *ethclient.Client
 	ETHChainID              int64
-	BSCChainID				int64
+	BSCChainID              int64
 	ETHTxSender             ethcom.Address
 	BSCTxSender             ethcom.Address
 	BSCContractAddrToSymbol map[string]string
@@ -52,15 +52,20 @@ type Swapper struct {
 }
 
 type TokenInstance struct {
-	Symbol      string
-	Name        string
-	Decimals    int
-	LowBound    *big.Int
-	UpperBound  *big.Int
-	CloseSignal chan bool
+	Symbol     string
+	Name       string
+	Decimals   int
+	LowBound   *big.Int
+	UpperBound *big.Int
 
-	BSCTokenContractAddr ethcom.Address
-	BSCERC20Threshold    *big.Int
-	ETHTokenContractAddr ethcom.Address
-	ETHERC20Threshold    *big.Int
+	CloseSignal                         chan bool
+	ETHTokenBalanceLowerThresholdSignal chan bool
+	BSCTokenBalanceLowerThresholdSignal chan bool
+
+	IsETHTokenBalanceLowerThreshold bool
+	IsBSCTokenBalanceLowerThreshold bool
+	BSCTokenContractAddr            ethcom.Address
+	BSCERC20Threshold               *big.Int
+	ETHTokenContractAddr            ethcom.Address
+	ETHERC20Threshold               *big.Int
 }

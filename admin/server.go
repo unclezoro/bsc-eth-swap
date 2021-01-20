@@ -67,8 +67,8 @@ type NewTokenRequest struct {
 	BSCERC20Threshold string `json:"bsc_erc20_threshold"`
 	ETHERC20Threshold string `json:"eth_erc20_threshold"`
 
-	TSSKeyThreashold uint32 `json:"tss_key_threashold"`
-	TSSKeyNodeCount  uint32 `json:"tss_key_node_count"`
+	TSSKeyThreshold uint32 `json:"tss_key_threshold"`
+	TSSKeyNodeCount uint32 `json:"tss_key_node_count"`
 }
 
 func (admin *Admin) AddToken(w http.ResponseWriter, r *http.Request) {
@@ -164,6 +164,61 @@ func (admin *Admin) AddToken(w http.ResponseWriter, r *http.Request) {
 	}
 
 	jsonBytes, err := json.MarshalIndent(token, "", "  ")
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(http.StatusOK)
+
+	_, err = w.Write(jsonBytes)
+	if err != nil {
+		util.Logger.Errorf("write response error, err=%s", err.Error())
+	}
+}
+
+type ResetTokenRequest struct {
+	Symbol string `json:"symbol"`
+}
+
+func (admin *Admin) ResetToken(w http.ResponseWriter, r *http.Request) {
+	apiKey := r.Header.Get("ApiKey")
+	auth := r.Header.Get("Authorization")
+
+	reqBody, err := ioutil.ReadAll(r.Body)
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusBadRequest)
+		return
+	}
+
+	if !admin.checkAuth(apiKey, reqBody, auth) {
+		http.Error(w, "auth is not correct", http.StatusUnauthorized)
+		return
+	}
+
+	var resetToken ResetTokenRequest
+	err = json.Unmarshal(reqBody, &resetToken)
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusBadRequest)
+		return
+	}
+
+	// get token
+	token := model.Token{}
+	err = admin.DB.Where("symbol = ?", resetToken.Symbol).First(&token).Error
+	if err != nil {
+		http.Error(w, fmt.Sprintf("token %s is not found", resetToken.Symbol), http.StatusBadRequest)
+		return
+	}
+
+	err = admin.Swapper.ResetToken(&token)
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+
+	jsonBytes, err := json.MarshalIndent(fmt.Sprintf("reset %s successfully", token.Symbol), "", "  ")
 	if err != nil {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
@@ -459,6 +514,7 @@ func (admin *Admin) Serve() {
 	router.HandleFunc("/", admin.Endpoints).Methods("GET")
 	router.HandleFunc("/healthz", admin.Healthz).Methods("GET")
 	router.HandleFunc("/add_token", admin.AddToken).Methods("POST")
+	router.HandleFunc("/reset_token", admin.ResetToken).Methods("POST")
 	router.HandleFunc("/update_token", admin.UpdateTokenHandler).Methods("PUT")
 	router.HandleFunc("/delete_token", admin.DeleteTokenHandler).Methods("DELETE")
 

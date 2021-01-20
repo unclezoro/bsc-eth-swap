@@ -141,6 +141,9 @@ type Token struct {
 
 	BSCERC20Threshold   string `gorm:"not null"`
 	ETHERC20Threshold   string `gorm:"not null"`
+
+	IsBSCBalanceLowerThanThreshold bool `gorm:"not null"`
+	IsETHBalanceLowerThanThreshold bool `gorm:"not null"`
 }
 
 func (Token) TableName() string {
