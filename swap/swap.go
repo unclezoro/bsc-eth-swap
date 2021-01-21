@@ -377,7 +377,7 @@ func (swapper *Swapper) swapInstanceDaemon(symbol string, direction common.SwapD
 			}
 
 			util.Logger.Infof("do swap token %s , direction %s, sponsor: %s, amount %s, decimals %d,", symbol, direction, swap.Sponsor, swap.Amount, swap.Decimals)
-			swapTx, swapErr := swapper.doSwap(&swap, tokenInstance, isETHTokenBalanceLowerThreshold, isBSCTokenBalanceLowerThreshold)
+			swapTx, swapErr := swapper.doSwap(&swap, tokenInstance, isBSCTokenBalanceLowerThreshold, isETHTokenBalanceLowerThreshold)
 
 			writeDBErr = func() error {
 				tx := swapper.DB.Begin()
@@ -766,6 +766,13 @@ func (swapper *Swapper) alertDaemon() {
 				util.SendTelegramMessage(fmt.Sprintf("symbol %s, failed to query bcs erc20 balance: %s", symbol, err.Error()))
 			} else {
 				if bscErc20Balance.Cmp(tokenInstance.BSCERC20Threshold) <= 0 {
+					toUpdate := map[string]interface{}{
+						"is_bsc_balance_lower_than_threshold": true,
+					}
+					err = swapper.DB.Model(model.Token{}).Where("symbol = ?", tokenInstance.Symbol).Updates(toUpdate).Error
+					if err != nil {
+						util.Logger.Errorf("update token error, err=%s", err.Error())
+					}
 					tokenInstance.BSCTokenBalanceLowerThresholdSignal <- true
 					util.Logger.Infof(fmt.Sprintf("symbol %s, bsc address %s, erc20 contract addr %s, bsc erc20 balance %s is less than threshold %s",
 						symbol, swapper.BSCTxSender.String(), tokenInstance.BSCTokenContractAddr.String(), bscErc20Balance.String(), tokenInstance.BSCERC20Threshold.String()))
@@ -773,6 +780,13 @@ func (swapper *Swapper) alertDaemon() {
 						symbol, swapper.BSCTxSender.String(), tokenInstance.BSCTokenContractAddr.String(), bscErc20Balance.String(), tokenInstance.BSCERC20Threshold.String()))
 				} else if bscErc20Balance.Cmp(big.NewInt(1).Mul(tokenInstance.BSCERC20Threshold, big.NewInt(2))) >= 0 {
 					tokenInstance.BSCTokenBalanceLowerThresholdSignal <- false
+					toUpdate := map[string]interface{}{
+						"is_bsc_balance_lower_than_threshold": false,
+					}
+					err = swapper.DB.Model(model.Token{}).Where("symbol = ?", tokenInstance.Symbol).Updates(toUpdate).Error
+					if err != nil {
+						util.Logger.Errorf("update token error, err=%s", err.Error())
+					}
 				}
 
 			}
@@ -789,6 +803,13 @@ func (swapper *Swapper) alertDaemon() {
 				util.SendTelegramMessage(fmt.Sprintf("symbol %s, failed to query eth erc20 balance: %s", symbol, err.Error()))
 			} else {
 				if ethErc20Balance.Cmp(tokenInstance.ETHERC20Threshold) <= 0 {
+					toUpdate := map[string]interface{}{
+						"is_eth_balance_lower_than_threshold": true,
+					}
+					err = swapper.DB.Model(model.Token{}).Where("symbol = ?", tokenInstance.Symbol).Updates(toUpdate).Error
+					if err != nil {
+						util.Logger.Errorf("update token error, err=%s", err.Error())
+					}
 					tokenInstance.ETHTokenBalanceLowerThresholdSignal <- true
 					util.Logger.Infof(fmt.Sprintf("symbol %s, eth address %s, erc20 contract addr %s, eth erc20 balance %s is less than threshold %s",
 						symbol, swapper.ETHTxSender.String(), tokenInstance.ETHTokenContractAddr.String(), ethErc20Balance.String(), tokenInstance.ETHERC20Threshold.String()))
@@ -796,6 +817,13 @@ func (swapper *Swapper) alertDaemon() {
 						symbol, swapper.ETHTxSender.String(), tokenInstance.ETHTokenContractAddr.String(), ethErc20Balance.String(), tokenInstance.ETHERC20Threshold.String()))
 				} else if ethErc20Balance.Cmp(big.NewInt(1).Mul(tokenInstance.ETHERC20Threshold, big.NewInt(2))) >= 0 {
 					tokenInstance.ETHTokenBalanceLowerThresholdSignal <- false
+					toUpdate := map[string]interface{}{
+						"is_eth_balance_lower_than_threshold": false,
+					}
+					err = swapper.DB.Model(model.Token{}).Where("symbol = ?", tokenInstance.Symbol).Updates(toUpdate).Error
+					if err != nil {
+						util.Logger.Errorf("update token error, err=%s", err.Error())
+					}
 				}
 			}
 		}
@@ -883,6 +911,15 @@ func (swapper *Swapper) ResetTokenInstance(token *model.Token) error {
 	}
 	tokenInstance.ETHTokenBalanceLowerThresholdSignal <- false
 	tokenInstance.BSCTokenBalanceLowerThresholdSignal <- false
+
+	toUpdate := map[string]interface{}{
+		"is_eth_balance_lower_than_threshold": false,
+		"is_bsc_balance_lower_than_threshold": false,
+	}
+	err := swapper.DB.Model(model.Token{}).Where("symbol = ?", tokenInstance.Symbol).Updates(toUpdate).Error
+	if err != nil {
+		util.Logger.Errorf("update token error, err=%s", err.Error())
+	}
 
 	return nil
 }
