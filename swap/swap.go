@@ -144,8 +144,8 @@ func (swapper *Swapper) insertSwap(tx *gorm.DB, swap *model.Swap) error {
 }
 
 func (swapper *Swapper) createSwap(txEventLog *model.TxEventLog) *model.Swap {
-	swapper.Mutex.RLock()
-	defer swapper.Mutex.RUnlock()
+	swapper.Mutex.Lock()
+	defer swapper.Mutex.Unlock()
 
 	sponsor := txEventLog.FromAddress
 	amount := txEventLog.Amount
@@ -495,6 +495,9 @@ func (swapper *Swapper) doSwap(swap *model.Swap, tokenInstance *TokenInstance, i
 	}
 
 	if swap.Direction == SwapEth2BSC {
+		swapper.ETHBSCSwapMutex.Lock()
+		defer swapper.ETHBSCSwapMutex.Unlock()
+
 		if isBSCTokenBalanceLowerThreshold {
 			return nil, fmt.Errorf("BSC token %s balance is under threshold %s", tokenInstance.Symbol, tokenInstance.BSCERC20Threshold.String())
 		}
@@ -521,6 +524,8 @@ func (swapper *Swapper) doSwap(swap *model.Swap, tokenInstance *TokenInstance, i
 		util.Logger.Infof("Send transaction to BSC, %s/%s", swapper.Config.ChainConfig.BSCExplorerUrl, signedTx.Hash().String())
 		return swapTx, nil
 	} else {
+		swapper.BSCETHSwapMutex.Lock()
+		defer swapper.BSCETHSwapMutex.Unlock()
 		if isETHTokenBalanceLowerThreshold {
 			return nil, fmt.Errorf("ETH token %s balance is under threshold %s", tokenInstance.Symbol, tokenInstance.ETHERC20Threshold.String())
 		}
@@ -925,8 +930,8 @@ func (swapper *Swapper) ResetTokenInstance(token *model.Token) error {
 }
 
 func (swapper *Swapper) GetTokenInstance(symbol string) *TokenInstance {
-	swapper.Mutex.Lock()
-	defer swapper.Mutex.Unlock()
+	swapper.Mutex.RLock()
+	defer swapper.Mutex.RUnlock()
 
 	tokenInstance, ok := swapper.TokenInstances[symbol]
 	if !ok {
@@ -951,6 +956,8 @@ func (swapper *Swapper) UpdateTokenInstance(token *model.Token) {
 	lowBound := big.NewInt(0)
 	_, ok = upperBound.SetString(token.LowBound, 10)
 	tokenInstance.LowBound = lowBound
+
+	swapper.TokenInstances[token.Symbol] = tokenInstance
 }
 
 func (swapper *Swapper) RemoveTokenInstance(token *model.Token) {

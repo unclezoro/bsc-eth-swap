@@ -35,6 +35,8 @@ const (
 
 type Swapper struct {
 	Mutex                   sync.RWMutex
+	BSCETHSwapMutex         sync.RWMutex
+	ETHBSCSwapMutex         sync.RWMutex
 	DB                      *gorm.DB
 	HMACKey                 string
 	Config                  *util.Config
