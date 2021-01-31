@@ -4,9 +4,15 @@ import (
 	"context"
 	"crypto/ecdsa"
 	"encoding/base64"
+	"encoding/hex"
 	"encoding/json"
 	"fmt"
+	"github.com/ethereum/go-ethereum"
+	"github.com/ethereum/go-ethereum/core/types"
+	"github.com/ethereum/go-ethereum/ethclient"
+	"github.com/ethereum/go-ethereum/rlp"
 	"math/big"
+	"strconv"
 	"strings"
 
 	"github.com/binance-chain/tss-crypto-toolkit/ec"
@@ -15,59 +21,42 @@ import (
 	tsssdksecure "github.com/binance-chain/tss-zerotrust-sdk/secure"
 	tsssdktypes "github.com/binance-chain/tss-zerotrust-sdk/types"
 	"github.com/ethereum/go-ethereum/accounts/abi"
-	"github.com/ethereum/go-ethereum/accounts/abi/bind"
 	ethcom "github.com/ethereum/go-ethereum/common"
 	"github.com/ethereum/go-ethereum/crypto"
 
 	"github.com/binance-chain/bsc-eth-swap/common"
 	"github.com/binance-chain/bsc-eth-swap/model"
-	"github.com/binance-chain/bsc-eth-swap/swap/erc20"
 	"github.com/binance-chain/bsc-eth-swap/util"
 )
 
-func buildTokenInstance(tokens []model.Token, cfg *util.Config) (map[string]*TokenInstance, error) {
-	tokenInstances := make(map[string]*TokenInstance, len(tokens))
+func buildSwapPairInstance(pairs []model.SwapPair) (map[ethcom.Address]*SwapPairIns, error) {
+	swapPairInstances := make(map[ethcom.Address]*SwapPairIns, len(pairs))
 
-	for _, token := range tokens {
+	for _, pair := range pairs {
 
 		lowBound := big.NewInt(0)
-		_, ok := lowBound.SetString(token.LowBound, 10)
+		_, ok := lowBound.SetString(pair.LowBound, 10)
 		if !ok {
-			panic(fmt.Sprintf("invalid lowBound amount: %s", token.LowBound))
+			panic(fmt.Sprintf("invalid lowBound amount: %s", pair.LowBound))
 		}
 		upperBound := big.NewInt(0)
-		_, ok = upperBound.SetString(token.UpperBound, 10)
+		_, ok = upperBound.SetString(pair.UpperBound, 10)
 		if !ok {
-			panic(fmt.Sprintf("invalid upperBound amount: %s", token.LowBound))
+			panic(fmt.Sprintf("invalid upperBound amount: %s", pair.LowBound))
 		}
 
-		bscERC20Threshold := big.NewInt(0)
-		bscERC20Threshold.SetString(token.BSCERC20Threshold, 10)
-
-		ethERC20Threshold := big.NewInt(0)
-		ethERC20Threshold.SetString(token.ETHERC20Threshold, 10)
-
-		tokenInstances[token.Symbol] = &TokenInstance{
-			Symbol:     token.Symbol,
-			Name:       token.Name,
-			Decimals:   token.Decimals,
-			LowBound:   lowBound,
-			UpperBound: upperBound,
-
-			CloseSignal:                         make(chan bool),
-			ETHTokenBalanceLowerThresholdSignal: make(chan bool),
-			BSCTokenBalanceLowerThresholdSignal: make(chan bool),
-
-			IsETHTokenBalanceLowerThreshold: token.IsETHBalanceLowerThanThreshold,
-			IsBSCTokenBalanceLowerThreshold: token.IsBSCBalanceLowerThanThreshold,
-			BSCTokenContractAddr:            ethcom.HexToAddress(token.BSCTokenContractAddr),
-			BSCERC20Threshold:               bscERC20Threshold,
-			ETHTokenContractAddr:            ethcom.HexToAddress(token.ETHTokenContractAddr),
-			ETHERC20Threshold:               ethERC20Threshold,
+		swapPairInstances[ethcom.HexToAddress(pair.BSCTokenContractAddr)] = &SwapPairIns{
+			Symbol:               pair.Symbol,
+			Name:                 pair.Name,
+			Decimals:             pair.Decimals,
+			LowBound:             lowBound,
+			UpperBound:           upperBound,
+			BSCTokenContractAddr: ethcom.HexToAddress(pair.BSCTokenContractAddr),
+			ETHTokenContractAddr: ethcom.HexToAddress(pair.ETHTokenContractAddr),
 		}
 	}
 
-	return tokenInstances, nil
+	return swapPairInstances, nil
 }
 
 func GetKeyConfig(cfg *util.Config) (*util.KeyConfig, error) {
@@ -96,31 +85,28 @@ func GetKeyConfig(cfg *util.Config) (*util.KeyConfig, error) {
 	}
 }
 
-func abiEncodeTransfer(recipient ethcom.Address, amount *big.Int) ([]byte, error) {
-	erc20ABI, err := abi.JSON(strings.NewReader(erc20.Erc20ABI))
-	if err != nil {
-		return nil, err
-	}
-
-	data, err := erc20ABI.Pack("transfer", recipient, amount)
+func abiEncodeFillETH2BSCSwap(ethTxHash ethcom.Hash, erc20Addr ethcom.Address, toAddress ethcom.Address, amount *big.Int, abi *abi.ABI) ([]byte, error) {
+	data, err := abi.Pack("fillETH2BSCSwap", ethTxHash, erc20Addr, toAddress, amount)
 	if err != nil {
 		return nil, err
 	}
 	return data, nil
 }
 
-func generateTxOpt(privateKey *ecdsa.PrivateKey) *bind.TransactOpts {
-	txOpts := bind.NewKeyedTransactor(privateKey)
-	txOpts.Value = big.NewInt(0)
-	return txOpts
+func abiEncodeFillBSC2ETHSwap(ethTxHash ethcom.Hash, erc20Addr ethcom.Address, toAddress ethcom.Address, amount *big.Int, abi *abi.ABI) ([]byte, error) {
+	data, err := abi.Pack("fillBSC2ETHSwap", ethTxHash, erc20Addr, toAddress, amount)
+	if err != nil {
+		return nil, err
+	}
+	return data, nil
 }
 
-func getCallOpts() *bind.CallOpts {
-	callOpts := &bind.CallOpts{
-		Pending: true,
-		Context: context.Background(),
+func abiEncodeCreateSwapPair(registerTxHash ethcom.Hash, erc20Addr ethcom.Address, name, symbol string, decimals uint8, abi *abi.ABI) ([]byte, error) {
+	data, err := abi.Pack("createSwapPair", registerTxHash, erc20Addr, name, symbol, decimals)
+	if err != nil {
+		return nil, err
 	}
-	return callOpts
+	return data, nil
 }
 
 func GetAddress(pubKey *ecdsa.PublicKey) ethcom.Address {
@@ -193,7 +179,7 @@ func NewClientSecureConfig(keyCfg *util.KeyConfig) *tsssdksecure.ClientSecureCon
 }
 
 func signBSC(secureConfig *tsssdksecure.ClientSecureConfig, endPoint string, from, to, amount string, contract, value string,
-	chainId int64, nonce int64, gasPrice string, gasLimit string, secureMode bool) (*tsssdktypes.SignResponse, error) {
+	chainId int64, nonce int64, gasPrice string, gasLimit string, data []byte, secureMode bool) (*tsssdktypes.SignResponse, error) {
 	request := &tsssdktypes.SignETHRequest{
 		From:     from,
 		To:       to,
@@ -204,6 +190,7 @@ func signBSC(secureConfig *tsssdksecure.ClientSecureConfig, endPoint string, fro
 		Nonce:    nonce,
 		GasPrice: gasPrice,
 		GasLimit: gasLimit,
+		Data:     hex.EncodeToString(data),
 	}
 
 	nt.BinanceSC.SetEndPoint(endPoint)
@@ -214,7 +201,7 @@ func signBSC(secureConfig *tsssdksecure.ClientSecureConfig, endPoint string, fro
 }
 
 func signETH(secureConfig *tsssdksecure.ClientSecureConfig, endPoint string, from, to, amount string, contract, value string,
-	chainId int64, nonce int64, gasPrice string, gasLimit string, secureMode bool) (*tsssdktypes.SignResponse, error) {
+	chainId int64, nonce int64, gasPrice string, gasLimit string, data []byte, secureMode bool) (*tsssdktypes.SignResponse, error) {
 	request := &tsssdktypes.SignETHRequest{
 		From:     from,
 		To:       to,
@@ -225,6 +212,7 @@ func signETH(secureConfig *tsssdksecure.ClientSecureConfig, endPoint string, fro
 		Nonce:    nonce,
 		GasPrice: gasPrice,
 		GasLimit: gasLimit,
+		Data:     hex.EncodeToString(data),
 	}
 
 	nt.Ethereum.SetEndPoint(endPoint)
@@ -232,4 +220,51 @@ func signETH(secureConfig *tsssdksecure.ClientSecureConfig, endPoint string, fro
 	nt.Ethereum.SetSecureConfig(secureConfig)
 
 	return nt.Ethereum.Sign(request)
+}
+
+func buildSignedTransaction(network string, txSender, contract ethcom.Address, ethClient *ethclient.Client, txInput []byte, tssConfig *tsssdksecure.ClientSecureConfig, endpoint string) (*types.Transaction, error) {
+
+	nonce, err := ethClient.PendingNonceAt(context.Background(), txSender)
+	if err != nil {
+		return nil, err
+	}
+	gasPrice, err := ethClient.SuggestGasPrice(context.Background())
+	if err != nil {
+		return nil, err
+	}
+	value := big.NewInt(0)
+	msg := ethereum.CallMsg{From: txSender, To: &contract, GasPrice: gasPrice, Value: value, Data: txInput}
+	gasLimit, err := ethClient.EstimateGas(context.Background(), msg)
+	if err != nil {
+		return nil, fmt.Errorf("failed to estimate gas needed: %v", err)
+	}
+	gasLimit = gasLimit * 2
+
+	chainId, err := ethClient.ChainID(context.Background())
+	if err != nil {
+		return nil, fmt.Errorf("failed to get chainid: %v", err)
+	}
+
+	var signedRawTx *tsssdktypes.SignResponse
+	if network == common.ChainBSC {
+		signedRawTx, err = signBSC(tssConfig, endpoint, txSender.String(),
+			"", "0", contract.String(), "", chainId.Int64(), int64(nonce), gasPrice.String(), strconv.Itoa(int(gasLimit)), txInput, true)
+		if err != nil {
+			return nil, fmt.Errorf("TSS server failure: %v", err)
+		}
+	} else {
+		signedRawTx, err = signETH(tssConfig, endpoint, txSender.String(),
+			"", "0", contract.String(), "", chainId.Int64(), int64(nonce), gasPrice.String(), strconv.Itoa(int(gasLimit)), txInput, true)
+		if err != nil {
+			return nil, fmt.Errorf("TSS server failure: %v", err)
+		}
+	}
+
+	var signedTx types.Transaction
+	err = rlp.DecodeBytes(ethcom.FromHex(signedRawTx.RawTransaction), &signedTx)
+	if err != nil {
+		return nil, fmt.Errorf("failed to decode TSS signed result: %v", err)
+	}
+
+	return &signedTx, nil
 }

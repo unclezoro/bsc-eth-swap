@@ -17,7 +17,7 @@ type Signer interface {
 	Verify(payload []byte, hash string) bool
 }
 
-// HmacSigner uses HMAC SHA256 for signing payloads.
+// hmacSigner uses HMAC SHA256 for signing payloads.
 type HmacSigner struct {
 	ApiKey    string
 	SecretKey []byte

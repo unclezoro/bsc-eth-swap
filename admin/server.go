@@ -6,16 +6,12 @@ import (
 	"io/ioutil"
 	"math/big"
 	"net/http"
-	"regexp"
-	"strings"
 	"time"
 
 	"github.com/ethereum/go-ethereum/common"
 	"github.com/gorilla/mux"
 	"github.com/jinzhu/gorm"
 
-	scmn "github.com/binance-chain/bsc-eth-swap/common"
-	"github.com/binance-chain/bsc-eth-swap/executor"
 	"github.com/binance-chain/bsc-eth-swap/model"
 	"github.com/binance-chain/bsc-eth-swap/swap"
 	"github.com/binance-chain/bsc-eth-swap/util"
@@ -24,256 +20,29 @@ import (
 const (
 	DefaultListenAddr = "0.0.0.0:8080"
 
-	MaxTokenLength   = 20
 	MaxIconUrlLength = 400
 )
-
-var isAlphaNumFunc = regexp.MustCompile(`^[[:alnum:]]+$`).MatchString
 
 type Admin struct {
 	DB *gorm.DB
 
 	cfg *util.Config
 
-	HmacSigner *util.HmacSigner
-	Swapper    *swap.Swapper
-
-	BSCExecutor executor.Executor
-	ETHExecutor executor.Executor
+	hmacSigner *util.HmacSigner
+	swapEngine *swap.SwapEngine
 }
 
-func NewAdmin(config *util.Config, db *gorm.DB, signer *util.HmacSigner, swapper *swap.Swapper, bscExecutor executor.Executor, ethExecutor executor.Executor) *Admin {
+func NewAdmin(config *util.Config, db *gorm.DB, signer *util.HmacSigner, swapEngine *swap.SwapEngine) *Admin {
 	return &Admin{
-		DB:          db,
-		cfg:         config,
-		HmacSigner:  signer,
-		Swapper:     swapper,
-		BSCExecutor: bscExecutor,
-		ETHExecutor: ethExecutor,
+		DB:         db,
+		cfg:        config,
+		hmacSigner: signer,
+		swapEngine: swapEngine,
 	}
 }
 
-type NewTokenRequest struct {
-	Symbol          string `json:"symbol"`
-	Name            string `json:"name"`
-	Decimals        int    `json:"decimals"`
-	BSCContractAddr string `json:"bsc_contract_addr"`
-	ETHContractAddr string `json:"eth_contract_addr"`
-	LowerBound      string `json:"lower_bound"`
-	UpperBound      string `json:"upper_bound"`
-
-	IconUrl string `json:"icon_url"`
-
-	BSCERC20Threshold string `json:"bsc_erc20_threshold"`
-	ETHERC20Threshold string `json:"eth_erc20_threshold"`
-}
-
-func (admin *Admin) AddToken(w http.ResponseWriter, r *http.Request) {
-	apiKey := r.Header.Get("ApiKey")
-	auth := r.Header.Get("Authorization")
-
-	reqBody, err := ioutil.ReadAll(r.Body)
-	if err != nil {
-		http.Error(w, err.Error(), http.StatusBadRequest)
-		return
-	}
-
-	if !admin.checkAuth(apiKey, reqBody, auth) {
-		http.Error(w, "auth is not correct", http.StatusUnauthorized)
-		return
-	}
-
-	var newToken NewTokenRequest
-	err = json.Unmarshal(reqBody, &newToken)
-	if err != nil {
-		http.Error(w, err.Error(), http.StatusBadRequest)
-		return
-	}
-
-	err = tokenBasicCheck(&newToken)
-	if err != nil {
-		http.Error(w, err.Error(), http.StatusBadRequest)
-		return
-	}
-
-	// check symbol
-	bscSymbol, err := admin.BSCExecutor.GetContractSymbol(common.HexToAddress(newToken.BSCContractAddr))
-	if err != nil {
-		http.Error(w, fmt.Sprintf("get bsc symbol error, addr=%s, err=%s", newToken.BSCContractAddr, err.Error()), http.StatusBadRequest)
-		return
-	}
-
-	ethSymbol, err := admin.ETHExecutor.GetContractSymbol(common.HexToAddress(newToken.ETHContractAddr))
-	if err != nil {
-		http.Error(w, fmt.Sprintf("get eth symbol error, addr=%s, err=%s", newToken.ETHContractAddr, err.Error()), http.StatusBadRequest)
-		return
-	}
-
-	if bscSymbol != ethSymbol || bscSymbol != newToken.Symbol {
-		http.Error(w, fmt.Sprintf("symbol is wrong, bsc_symbol=%s, eth_symbol=%s", bscSymbol, ethSymbol), http.StatusBadRequest)
-		return
-	}
-
-	// check decimals
-	bscDecimals, err := admin.BSCExecutor.GetContractDecimals(common.HexToAddress(newToken.BSCContractAddr))
-	if err != nil {
-		http.Error(w, fmt.Sprintf("get bsc decimals error, addr=%s, err=%s", newToken.BSCContractAddr, err.Error()), http.StatusBadRequest)
-		return
-	}
-
-	ethDecimals, err := admin.ETHExecutor.GetContractDecimals(common.HexToAddress(newToken.ETHContractAddr))
-	if err != nil {
-		http.Error(w, fmt.Sprintf("get eth decimals error, addr=%s, err=%s", newToken.ETHContractAddr, err.Error()), http.StatusBadRequest)
-		return
-	}
-
-	if bscDecimals != ethDecimals || bscDecimals != newToken.Decimals {
-		http.Error(w, fmt.Sprintf("decimals is wrong, bsc_decimals=%d, eth_decimals=%d", bscDecimals, ethDecimals), http.StatusBadRequest)
-		return
-	}
-
-	tokenModel := model.Token{
-		Symbol:               newToken.Symbol,
-		Name:                 newToken.Name,
-		Decimals:             newToken.Decimals,
-		BSCTokenContractAddr: strings.ToLower(common.HexToAddress(newToken.BSCContractAddr).String()),
-		ETHTokenContractAddr: strings.ToLower(common.HexToAddress(newToken.ETHContractAddr).String()),
-		LowBound:             newToken.LowerBound,
-		UpperBound:           newToken.UpperBound,
-		IconUrl:              newToken.IconUrl,
-		BSCERC20Threshold:    newToken.BSCERC20Threshold,
-		ETHERC20Threshold:    newToken.ETHERC20Threshold,
-		Available:            false,
-	}
-
-	err = admin.DB.Create(&tokenModel).Error
-	if err != nil {
-		http.Error(w, err.Error(), http.StatusInternalServerError)
-		return
-	}
-
-	// get token
-	token := model.Token{}
-	err = admin.DB.Where("symbol = ?", tokenModel.Symbol).First(&token).Error
-	if err != nil {
-		http.Error(w, fmt.Sprintf("token %s is not found", tokenModel.Symbol), http.StatusBadRequest)
-		return
-	}
-
-	jsonBytes, err := json.MarshalIndent(token, "", "  ")
-	if err != nil {
-		http.Error(w, err.Error(), http.StatusInternalServerError)
-		return
-	}
-
-	w.Header().Set("Content-Type", "application/json")
-	w.WriteHeader(http.StatusOK)
-
-	_, err = w.Write(jsonBytes)
-	if err != nil {
-		util.Logger.Errorf("write response error, err=%s", err.Error())
-	}
-}
-
-type ResetTokenRequest struct {
-	Symbol string `json:"symbol"`
-}
-
-func (admin *Admin) ResetToken(w http.ResponseWriter, r *http.Request) {
-	apiKey := r.Header.Get("ApiKey")
-	auth := r.Header.Get("Authorization")
-
-	reqBody, err := ioutil.ReadAll(r.Body)
-	if err != nil {
-		http.Error(w, err.Error(), http.StatusBadRequest)
-		return
-	}
-
-	if !admin.checkAuth(apiKey, reqBody, auth) {
-		http.Error(w, "auth is not correct", http.StatusUnauthorized)
-		return
-	}
-
-	var resetToken ResetTokenRequest
-	err = json.Unmarshal(reqBody, &resetToken)
-	if err != nil {
-		http.Error(w, err.Error(), http.StatusBadRequest)
-		return
-	}
-
-	// get token
-	token := model.Token{}
-	err = admin.DB.Where("symbol = ?", resetToken.Symbol).First(&token).Error
-	if err != nil {
-		http.Error(w, fmt.Sprintf("token %s is not found", resetToken.Symbol), http.StatusBadRequest)
-		return
-	}
-
-	err = admin.Swapper.ResetTokenInstance(&token)
-	if err != nil {
-		http.Error(w, err.Error(), http.StatusInternalServerError)
-		return
-	}
-
-	jsonBytes, err := json.MarshalIndent(fmt.Sprintf("reset %s successfully", token.Symbol), "", "  ")
-	if err != nil {
-		http.Error(w, err.Error(), http.StatusInternalServerError)
-		return
-	}
-
-	w.Header().Set("Content-Type", "application/json")
-	w.WriteHeader(http.StatusOK)
-
-	_, err = w.Write(jsonBytes)
-	if err != nil {
-		util.Logger.Errorf("write response error, err=%s", err.Error())
-	}
-}
-
-func tokenBasicCheck(token *NewTokenRequest) error {
-	if len(token.Symbol) == 0 || len(token.Symbol) > MaxTokenLength {
-		return fmt.Errorf("symbol length invalid")
-	}
-	if !isAlphaNumFunc(token.Symbol) {
-		return fmt.Errorf("symbol contains invalid character")
-	}
-	if len(token.IconUrl) > MaxIconUrlLength {
-		return fmt.Errorf("icon length exceed limit")
-	}
-	if token.Name == "" {
-		return fmt.Errorf("name should not be empty")
-	}
-	if token.Decimals <= 0 {
-		return fmt.Errorf("decimals should be larger than 0")
-	}
-	if token.LowerBound == "" {
-		return fmt.Errorf("lower_bound should not be empty")
-	}
-	if token.UpperBound == "" {
-		return fmt.Errorf("upper_bound should not be empty")
-	}
-
-	if _, ok := big.NewInt(0).SetString(token.UpperBound, 10); !ok {
-		return fmt.Errorf("invalid upperBound amount: %s", token.UpperBound)
-	}
-
-	if _, ok := big.NewInt(0).SetString(token.LowerBound, 10); !ok {
-		return fmt.Errorf("invalid lowerBound amount: %s", token.LowerBound)
-	}
-
-	// check addresses
-	if !common.IsHexAddress(token.BSCContractAddr) {
-		return fmt.Errorf("bsc_contract_addr is wrong")
-	}
-	if !common.IsHexAddress(token.ETHContractAddr) {
-		return fmt.Errorf("eth_contract_addr is wrong")
-	}
-
-	return nil
-}
-
-type UpdateTokenRequest struct {
-	Symbol string `json:"symbol"`
+type updateSwapPairRequest struct {
+	BSCTokenContractAddr string `json:"bsc_token_contract_addr"`
 
 	Available bool `json:"available"`
 
@@ -283,12 +52,9 @@ type UpdateTokenRequest struct {
 	IconUrl string `json:"icon_url"`
 }
 
-func updateCheck(update *UpdateTokenRequest) error {
-	if len(update.Symbol) == 0 || len(update.Symbol) > MaxTokenLength {
-		return fmt.Errorf("symbol length invalid")
-	}
-	if !isAlphaNumFunc(update.Symbol) {
-		return fmt.Errorf("symbol contains invalid character")
+func updateCheck(update *updateSwapPairRequest) error {
+	if update.BSCTokenContractAddr == "" {
+		return fmt.Errorf("bsc_token_contract_addr can't be empty")
 	}
 	if update.UpperBound != "" {
 		if _, ok := big.NewInt(0).SetString(update.UpperBound, 10); !ok {
@@ -306,7 +72,7 @@ func updateCheck(update *UpdateTokenRequest) error {
 	return nil
 }
 
-func (admin *Admin) UpdateTokenHandler(w http.ResponseWriter, r *http.Request) {
+func (admin *Admin) UpdateSwapPairHandler(w http.ResponseWriter, r *http.Request) {
 	apiKey := r.Header.Get("ApiKey")
 	auth := r.Header.Get("Authorization")
 
@@ -321,66 +87,68 @@ func (admin *Admin) UpdateTokenHandler(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	var updateToken UpdateTokenRequest
-	err = json.Unmarshal(reqBody, &updateToken)
+	var updateSwapPair updateSwapPairRequest
+	err = json.Unmarshal(reqBody, &updateSwapPair)
 	if err != nil {
 		http.Error(w, err.Error(), http.StatusBadRequest)
 		return
 	}
 
-	if err := updateCheck(&updateToken); err != nil {
+	if err := updateCheck(&updateSwapPair); err != nil {
 		http.Error(w, fmt.Sprintf("parameters is invalid, %v", err), http.StatusBadRequest)
 		return
 	}
 
-	token := model.Token{}
-	err = admin.DB.Where("symbol = ?", updateToken.Symbol).First(&token).Error
+	swapPair := model.SwapPair{}
+	err = admin.DB.Where("bsc_token_contract_addr = ?", updateSwapPair.BSCTokenContractAddr).First(&swapPair).Error
 	if err != nil {
-		http.Error(w, fmt.Sprintf("token %s is not found", updateToken.Symbol), http.StatusBadRequest)
+		http.Error(w, fmt.Sprintf("swapPair %s is not found", updateSwapPair.BSCTokenContractAddr), http.StatusBadRequest)
 		return
 	}
 
 	toUpdate := map[string]interface{}{
-		"available": updateToken.Available,
+		"available": updateSwapPair.Available,
 	}
 
-	if updateToken.LowerBound != "" {
-		toUpdate["low_bound"] = updateToken.LowerBound
+	if updateSwapPair.LowerBound != "" {
+		toUpdate["low_bound"] = updateSwapPair.LowerBound
 	}
-	if updateToken.UpperBound != "" {
-		toUpdate["upper_bound"] = updateToken.UpperBound
+	if updateSwapPair.UpperBound != "" {
+		toUpdate["upper_bound"] = updateSwapPair.UpperBound
 	}
-	if updateToken.IconUrl != "" {
-		toUpdate["icon_url"] = updateToken.IconUrl
+	if updateSwapPair.IconUrl != "" {
+		toUpdate["icon_url"] = updateSwapPair.IconUrl
 	}
 
-	err = admin.DB.Model(model.Token{}).Where("symbol = ?", updateToken.Symbol).Updates(toUpdate).Error
+	err = admin.DB.Model(model.SwapPair{}).Where("bsc_token_contract_addr = ?", updateSwapPair.BSCTokenContractAddr).Updates(toUpdate).Error
 	if err != nil {
-		http.Error(w, fmt.Sprintf("update token error, err=%s", err.Error()), http.StatusInternalServerError)
+		http.Error(w, fmt.Sprintf("update swapPair error, err=%s", err.Error()), http.StatusInternalServerError)
 		return
 	}
 
-	// get token
-	token = model.Token{}
-	err = admin.DB.Where("symbol = ?", updateToken.Symbol).First(&token).Error
+	// get swapPair
+	swapPair = model.SwapPair{}
+	err = admin.DB.Where("bsc_token_contract_addr = ?", updateSwapPair.BSCTokenContractAddr).First(&swapPair).Error
 	if err != nil {
-		http.Error(w, fmt.Sprintf("token %s is not found", updateToken.Symbol), http.StatusBadRequest)
+		http.Error(w, fmt.Sprintf("swapPair %s is not found", updateSwapPair.BSCTokenContractAddr), http.StatusBadRequest)
 		return
 	}
 
-	tokenInstance := admin.Swapper.GetTokenInstance(updateToken.Symbol)
-	if tokenInstance == nil && updateToken.Available {
-		// add token in swapper
-		err = admin.Swapper.AddTokenInstance(&token)
+	swapPairIns := admin.swapEngine.GetSwapPairInstance(common.HexToAddress(updateSwapPair.BSCTokenContractAddr))
+	// disable is only for frontend, do not affect backend
+	// if we want to disable it in backend, set the low_bound and upper_bound to be zero
+	if swapPairIns == nil {
+		// add swapPair in swapper
+		err = admin.swapEngine.AddSwapPairInstance(&swapPair)
 		if err != nil {
 			http.Error(w, err.Error(), http.StatusInternalServerError)
 			return
 		}
-	} else if tokenInstance != nil {
-		admin.Swapper.UpdateTokenInstance(&token)
+	} else if swapPairIns != nil {
+		admin.swapEngine.UpdateSwapInstance(&swapPair)
 	}
 
-	jsonBytes, err := json.MarshalIndent(token, "", "  ")
+	jsonBytes, err := json.MarshalIndent(swapPair, "", "  ")
 	if err != nil {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
@@ -395,89 +163,12 @@ func (admin *Admin) UpdateTokenHandler(w http.ResponseWriter, r *http.Request) {
 	}
 }
 
-type DeleteTokenRequest struct {
-	Symbol string `json:"symbol"`
-}
-
-func (admin *Admin) DeleteTokenHandler(w http.ResponseWriter, r *http.Request) {
-	apiKey := r.Header.Get("ApiKey")
-	auth := r.Header.Get("Authorization")
-
-	reqBody, err := ioutil.ReadAll(r.Body)
-	if err != nil {
-		http.Error(w, err.Error(), http.StatusBadRequest)
-		return
-	}
-
-	if !admin.checkAuth(apiKey, reqBody, auth) {
-		http.Error(w, "auth is not correct", http.StatusUnauthorized)
-		return
-	}
-
-	var deleteToken DeleteTokenRequest
-	err = json.Unmarshal(reqBody, &deleteToken)
-	if err != nil {
-		http.Error(w, err.Error(), http.StatusBadRequest)
-		return
-	}
-
-	symbol := deleteToken.Symbol
-	if symbol == "" {
-		http.Error(w, "required parameter 'symbol' is missing", http.StatusBadRequest)
-		return
-	}
-
-	// check symbol
-	if len(symbol) == 0 || len(symbol) > MaxTokenLength {
-		http.Error(w, "symbol length invalid", http.StatusBadRequest)
-		return
-	}
-	if !isAlphaNumFunc(symbol) {
-		http.Error(w, "symbol contains invalid character", http.StatusBadRequest)
-		return
-	}
-
-	token := model.Token{}
-	err = admin.DB.Where("symbol = ?", symbol).First(&token).Error
-	if err != nil {
-		http.Error(w, fmt.Sprintf("token %s is not found", symbol), http.StatusBadRequest)
-		return
-	}
-
-	// check ongoing swaps
-	var ongoingSwapCount = 0
-	err = admin.DB.Model(model.Swap{}).Where("status not in (?)", []scmn.SwapStatus{swap.SwapQuoteRejected, swap.SwapSendFailed, swap.SwapSuccess}).Count(&ongoingSwapCount).Error
-	if err != nil {
-		http.Error(w, fmt.Sprintf("find ongoing swaps error: %s", err.Error()), http.StatusInternalServerError)
-		return
-	}
-	if ongoingSwapCount > 0 {
-		http.Error(w, fmt.Sprintf("there are onging swaps, can not delete token"), http.StatusBadRequest)
-		return
-	}
-
-	// delete token
-	err = admin.DB.Where("symbol = ?", symbol).Unscoped().Delete(&model.Token{}).Error
-	if err != nil {
-		http.Error(w, fmt.Sprintf("delete token error, err=%s", err.Error()), http.StatusInternalServerError)
-		return
-	}
-
-	// remove token in swapper
-	admin.Swapper.RemoveTokenInstance(&token)
-
-	w.Header().Set("Content-Type", "application/json")
-	w.WriteHeader(http.StatusOK)
-}
-
 func (admin *Admin) Endpoints(w http.ResponseWriter, r *http.Request) {
 	endpoints := struct {
 		Endpoints []string `json:"endpoints"`
 	}{
 		Endpoints: []string{
-			"/add_token",
-			"/update_token",
-			"/delete_token/{symbol}",
+			"/update_swap_pair",
 			"/healthz",
 		},
 	}
@@ -501,11 +192,11 @@ func (admin *Admin) Healthz(w http.ResponseWriter, r *http.Request) {
 }
 
 func (admin *Admin) checkAuth(apiKey string, payload []byte, hash string) bool {
-	if admin.HmacSigner.ApiKey != apiKey {
+	if admin.hmacSigner.ApiKey != apiKey {
 		return false
 	}
 
-	return admin.HmacSigner.Verify(payload, hash)
+	return admin.hmacSigner.Verify(payload, hash)
 }
 
 func (admin *Admin) Serve() {
@@ -513,10 +204,7 @@ func (admin *Admin) Serve() {
 
 	router.HandleFunc("/", admin.Endpoints).Methods("GET")
 	router.HandleFunc("/healthz", admin.Healthz).Methods("GET")
-	router.HandleFunc("/add_token", admin.AddToken).Methods("POST")
-	router.HandleFunc("/reset_token", admin.ResetToken).Methods("POST")
-	router.HandleFunc("/update_token", admin.UpdateTokenHandler).Methods("PUT")
-	router.HandleFunc("/delete_token", admin.DeleteTokenHandler).Methods("DELETE")
+	router.HandleFunc("/update_swap_pair", admin.UpdateSwapPairHandler).Methods("PUT")
 
 	listenAddr := DefaultListenAddr
 	if admin.cfg.AdminConfig.ListenAddr != "" {

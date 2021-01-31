@@ -45,7 +45,7 @@ func (ob *Observer) Start() {
 func (ob *Observer) fetchSleep() {
 	if ob.Executor.GetChainName() == common.ChainBSC {
 		time.Sleep(time.Duration(ob.Config.ChainConfig.BSCObserverFetchInterval) * time.Second)
-	} else {
+	} else if ob.Executor.GetChainName() == common.ChainETH {
 		time.Sleep(time.Duration(ob.Config.ChainConfig.ETHObserverFetchInterval) * time.Second)
 	}
 
@@ -56,7 +56,7 @@ func (ob *Observer) Fetch(startHeight int64) {
 	for {
 		curBlockLog, err := ob.GetCurrentBlockLog()
 		if err != nil {
-			util.Logger.Errorf("get current block log from DB error: %s", err.Error())
+			util.Logger.Errorf("get current block log from db error: %s", err.Error())
 			ob.fetchSleep()
 			continue
 		}
@@ -100,7 +100,11 @@ func (ob *Observer) fetchBlock(curHeight, nextHeight int64, curBlockHash string)
 			return err
 		}
 
-		err = ob.UpdateConfirmedNum(nextBlockLog.Height)
+		err = ob.UpdateSwapStartConfirmedNum(nextBlockLog.Height)
+		if err != nil {
+			return err
+		}
+		err = ob.UpdateSwapPairRegisterConfirmedNum(nextBlockLog.Height)
 		if err != nil {
 			return err
 		}
@@ -120,16 +124,30 @@ func (ob *Observer) DeleteBlockAndTxEvents(height int64) error {
 		return err
 	}
 
-	txEventLogList := make([]model.TxEventLog, 0)
+	txEventLogList := make([]model.SwapStartTxLog, 0)
 	ob.DB.Where("chain = ? and height = ? and status = ?", ob.Executor.GetChainName(), height, model.TxStatusInit).Find(&txEventLogList)
 	for _, txEventLog := range txEventLogList {
-		if err := tx.Where("deposit_tx_hash = ?", txEventLog.TxHash).Delete(model.Swap{}).Error; err != nil {
+		if err := tx.Where("start_tx_hash = ?", txEventLog.TxHash).Delete(model.Swap{}).Error; err != nil {
 			tx.Rollback()
 			return err
 		}
 	}
 
-	if err := tx.Where("chain = ? and height = ? and status = ?", ob.Executor.GetChainName(), height, model.TxStatusInit).Delete(model.TxEventLog{}).Error; err != nil {
+	if err := tx.Where("chain = ? and height = ? and status = ?", ob.Executor.GetChainName(), height, model.TxStatusInit).Delete(model.SwapStartTxLog{}).Error; err != nil {
+		tx.Rollback()
+		return err
+	}
+
+	registerLogList := make([]model.SwapPairRegisterTxLog, 0)
+	ob.DB.Where("chain = ? and height = ? and status = ?", ob.Executor.GetChainName(), height, model.TxStatusInit).Find(&registerLogList)
+	for _, registerLog := range registerLogList {
+		if err := tx.Where("swap_pair_register_tx_hash = ?", registerLog.TxHash).Delete(model.SwapPairStateMachine{}).Error; err != nil {
+			tx.Rollback()
+			return err
+		}
+	}
+
+	if err := tx.Where("chain = ? and height = ? and status = ?", ob.Executor.GetChainName(), height, model.TxStatusInit).Delete(model.SwapPairRegisterTxLog{}).Error; err != nil {
 		tx.Rollback()
 		return err
 	}
@@ -137,8 +155,8 @@ func (ob *Observer) DeleteBlockAndTxEvents(height int64) error {
 	return tx.Commit().Error
 }
 
-func (ob *Observer) UpdateConfirmedNum(height int64) error {
-	err := ob.DB.Model(model.TxEventLog{}).Where("chain = ? and status = ?", ob.Executor.GetChainName(), model.TxStatusInit).Updates(
+func (ob *Observer) UpdateSwapStartConfirmedNum(height int64) error {
+	err := ob.DB.Model(model.SwapStartTxLog{}).Where("chain = ? and status = ?", ob.Executor.GetChainName(), model.TxStatusInit).Updates(
 		map[string]interface{}{
 			"confirmed_num": gorm.Expr("? - height", height+1),
 		}).Error
@@ -146,7 +164,28 @@ func (ob *Observer) UpdateConfirmedNum(height int64) error {
 		return err
 	}
 
-	err = ob.DB.Model(model.TxEventLog{}).Where("chain = ? and status = ? and confirmed_num >= ?",
+	err = ob.DB.Model(model.SwapStartTxLog{}).Where("chain = ? and status = ? and confirmed_num >= ?",
+		ob.Executor.GetChainName(), model.TxStatusInit, ob.ConfirmNum).Updates(
+		map[string]interface{}{
+			"status": model.TxStatusConfirmed,
+		}).Error
+	if err != nil {
+		return err
+	}
+
+	return nil
+}
+
+func (ob *Observer) UpdateSwapPairRegisterConfirmedNum(height int64) error {
+	err := ob.DB.Model(model.SwapPairRegisterTxLog{}).Where("chain = ? and status = ?", ob.Executor.GetChainName(), model.TxStatusInit).Updates(
+		map[string]interface{}{
+			"confirmed_num": gorm.Expr("? - height", height+1),
+		}).Error
+	if err != nil {
+		return err
+	}
+
+	err = ob.DB.Model(model.SwapPairRegisterTxLog{}).Where("chain = ? and status = ? and confirmed_num >= ?",
 		ob.Executor.GetChainName(), model.TxStatusInit, ob.ConfirmNum).Updates(
 		map[string]interface{}{
 			"status": model.TxStatusConfirmed,

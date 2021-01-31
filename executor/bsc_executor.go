@@ -8,52 +8,44 @@ import (
 
 	"github.com/ethereum/go-ethereum"
 	"github.com/ethereum/go-ethereum/accounts/abi"
-	"github.com/ethereum/go-ethereum/accounts/abi/bind"
 	ethcmm "github.com/ethereum/go-ethereum/common"
 	"github.com/ethereum/go-ethereum/core/types"
 	"github.com/ethereum/go-ethereum/ethclient"
 
+	agent "github.com/binance-chain/bsc-eth-swap/abi"
 	"github.com/binance-chain/bsc-eth-swap/common"
-	swapproxy "github.com/binance-chain/bsc-eth-swap/executor/abi"
 	"github.com/binance-chain/bsc-eth-swap/util"
 )
 
-type Executor interface {
-	GetBlockAndTxEvents(height int64) (*common.BlockAndEventLogs, error)
-	GetChainName() string
-	GetContractDecimals(address ethcmm.Address) (int, error)
-	GetContractSymbol(address ethcmm.Address) (string, error)
-}
-
-type ChainExecutor struct {
+type BscExecutor struct {
 	Chain  string
 	Config *util.Config
 
-	SwapProxyAddr ethcmm.Address
-	SwapProxyAbi  abi.ABI
+	SwapAgentAddr ethcmm.Address
+	SwapAgentAbi  abi.ABI
 	Client        *ethclient.Client
 }
 
-func NewExecutor(chain string, ethClient *ethclient.Client, swapAddr string, config *util.Config) *ChainExecutor {
-	proxyAbi, err := abi.JSON(strings.NewReader(swapproxy.SwapProxyABI))
+func NewBSCExecutor(ethClient *ethclient.Client, swapAddr string, config *util.Config) *BscExecutor {
+	agentAbi, err := abi.JSON(strings.NewReader(agent.BSCSwapAgentABI))
 	if err != nil {
 		panic("marshal abi error")
 	}
 
-	return &ChainExecutor{
-		Chain:         chain,
+	return &BscExecutor{
+		Chain:         common.ChainBSC,
 		Config:        config,
-		SwapProxyAddr: ethcmm.HexToAddress(swapAddr),
-		SwapProxyAbi:  proxyAbi,
+		SwapAgentAddr: ethcmm.HexToAddress(swapAddr),
+		SwapAgentAbi:  agentAbi,
 		Client:        ethClient,
 	}
 }
 
-func (e *ChainExecutor) GetChainName() string {
+func (e *BscExecutor) GetChainName() string {
 	return e.Chain
 }
 
-func (e *ChainExecutor) GetBlockAndTxEvents(height int64) (*common.BlockAndEventLogs, error) {
+func (e *BscExecutor) GetBlockAndTxEvents(height int64) (*common.BlockAndEventLogs, error) {
 	ctxWithTimeout, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
 
@@ -76,9 +68,12 @@ func (e *ChainExecutor) GetBlockAndTxEvents(height int64) (*common.BlockAndEvent
 		Events:          packageLogs,
 	}, nil
 }
+func (e *BscExecutor) GetLogs(header *types.Header) ([]interface{}, error) {
+	return e.GetSwapStartLogs(header)
+}
 
-func (e *ChainExecutor) GetLogs(header *types.Header) ([]interface{}, error) {
-	topics := [][]ethcmm.Hash{{TokenTransferEventHash}}
+func (e *BscExecutor) GetSwapStartLogs(header *types.Header) ([]interface{}, error) {
+	topics := [][]ethcmm.Hash{{SwapStartedEventHash}}
 
 	blockHash := header.Hash()
 
@@ -88,7 +83,7 @@ func (e *ChainExecutor) GetLogs(header *types.Header) ([]interface{}, error) {
 	logs, err := e.Client.FilterLogs(ctxWithTimeout, ethereum.FilterQuery{
 		BlockHash: &blockHash,
 		Topics:    topics,
-		Addresses: []ethcmm.Address{e.SwapProxyAddr},
+		Addresses: []ethcmm.Address{e.SwapAgentAddr},
 	})
 	if err != nil {
 		return nil, err
@@ -98,7 +93,7 @@ func (e *ChainExecutor) GetLogs(header *types.Header) ([]interface{}, error) {
 	for _, log := range logs {
 		util.Logger.Debugf("get log: %d, %s, %s", log.BlockNumber, log.Topics[0].String(), log.TxHash.String())
 
-		event, err := ParseTokenTransferEvent(&e.SwapProxyAbi, &log)
+		event, err := ParseSwapStartEvent(&e.SwapAgentAbi, &log)
 		if err != nil {
 			util.Logger.Errorf("parse event log error, er=%s", err.Error())
 			continue
@@ -108,28 +103,10 @@ func (e *ChainExecutor) GetLogs(header *types.Header) ([]interface{}, error) {
 			continue
 		}
 
-		eventModel := event.ToTxLog(&log)
+		eventModel := event.ToSwapStartTxLog(&log)
 		eventModel.Chain = e.Chain
 
 		eventModels = append(eventModels, eventModel)
 	}
 	return eventModels, nil
-}
-
-func (e *ChainExecutor) GetContractDecimals(address ethcmm.Address) (int, error) {
-	instance, err := swapproxy.NewERC20(address, e.Client)
-	if err != nil {
-		return 0, err
-	}
-	decimals, err := instance.Decimals(&bind.CallOpts{})
-	return int(decimals), err
-}
-
-func (e *ChainExecutor) GetContractSymbol(address ethcmm.Address) (string, error) {
-	instance, err := swapproxy.NewERC20(address, e.Client)
-	if err != nil {
-		return "", err
-	}
-	symbol, err := instance.Symbol(&bind.CallOpts{})
-	return symbol, err
 }

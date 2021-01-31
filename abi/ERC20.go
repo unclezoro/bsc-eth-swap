@@ -1,7 +1,7 @@
 // Code generated - DO NOT EDIT.
 // This file is a generated binding and any manual changes will be lost.
 
-package swap_proxy
+package abi
 
 import (
 	"math/big"
@@ -198,7 +198,7 @@ func (_ERC20 *ERC20CallerSession) Decimals() (uint8, error) {
 	return _ERC20.Contract.Decimals(&_ERC20.CallOpts)
 }
 
-// Symbol is a free data retrieval call binding the contract method 0x95d89b41.
+// BscContractAddr is a free data retrieval call binding the contract method 0x95d89b41.
 //
 // Solidity: function symbol() constant returns(string)
 func (_ERC20 *ERC20Caller) Symbol(opts *bind.CallOpts) (string, error) {
@@ -210,14 +210,14 @@ func (_ERC20 *ERC20Caller) Symbol(opts *bind.CallOpts) (string, error) {
 	return *ret0, err
 }
 
-// Symbol is a free data retrieval call binding the contract method 0x95d89b41.
+// BscContractAddr is a free data retrieval call binding the contract method 0x95d89b41.
 //
 // Solidity: function symbol() constant returns(string)
 func (_ERC20 *ERC20Session) Symbol() (string, error) {
 	return _ERC20.Contract.Symbol(&_ERC20.CallOpts)
 }
 
-// Symbol is a free data retrieval call binding the contract method 0x95d89b41.
+// BscContractAddr is a free data retrieval call binding the contract method 0x95d89b41.
 //
 // Solidity: function symbol() constant returns(string)
 func (_ERC20 *ERC20CallerSession) Symbol() (string, error) {

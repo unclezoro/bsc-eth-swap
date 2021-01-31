@@ -131,17 +131,17 @@ type ChainConfig struct {
 	BSCStartHeight              int64  `json:"bsc_start_height"`
 	BSCProvider                 string `json:"bsc_provider"`
 	BSCConfirmNum               int64  `json:"bsc_confirm_num"`
-	BSCSwapContractAddr         string `json:"bsc_swap_contract_addr"`
+	BSCSwapAgentAddr            string `json:"bsc_swap_agent_addr"`
 	BSCExplorerUrl              string `json:"bsc_explorer_url"`
 	BSCMaxTrackRetry            int64  `json:"bsc_max_track_retry"`
-	BNBAlertThreshold           string `json:"bnb_alert_threshold"`
+	BSCAlertThreshold           string `json:"bsc_alert_threshold"`
 	BSCWaitMilliSecBetweenSwaps int64  `json:"bsc_wait_milli_sec_between_swaps"`
 
 	ETHObserverFetchInterval    int64  `json:"eth_observer_fetch_interval"`
 	ETHStartHeight              int64  `json:"eth_start_height"`
 	ETHProvider                 string `json:"eth_provider"`
 	ETHConfirmNum               int64  `json:"eth_confirm_num"`
-	ETHSwapContractAddr         string `json:"eth_swap_contract_addr"`
+	ETHSwapAgentAddr            string `json:"eth_swap_agent_addr"`
 	ETHExplorerUrl              string `json:"eth_explorer_url"`
 	ETHMaxTrackRetry            int64  `json:"eth_max_track_retry"`
 	ETHAlertThreshold           string `json:"eth_alert_threshold"`
@@ -158,8 +158,8 @@ func (cfg ChainConfig) Validate() {
 	if cfg.BSCConfirmNum <= 0 {
 		panic("bsc_confirm_num should be larger than 0")
 	}
-	if !ethcom.IsHexAddress(cfg.BSCSwapContractAddr) {
-		panic(fmt.Sprintf("invalid bsc_swap_contract_addr: %s", cfg.BSCSwapContractAddr))
+	if !ethcom.IsHexAddress(cfg.BSCSwapAgentAddr) {
+		panic(fmt.Sprintf("invalid bsc_swap_contract_addr: %s", cfg.BSCSwapAgentAddr))
 	}
 	if cfg.BSCMaxTrackRetry <= 0 {
 		panic("bsc_max_track_retry should be larger than 0")
@@ -171,8 +171,8 @@ func (cfg ChainConfig) Validate() {
 	if cfg.ETHProvider == "" {
 		panic("bsc_provider should not be empty")
 	}
-	if !ethcom.IsHexAddress(cfg.ETHSwapContractAddr) {
-		panic(fmt.Sprintf("invalid eth_swap_contract_addr: %s", cfg.ETHSwapContractAddr))
+	if !ethcom.IsHexAddress(cfg.ETHSwapAgentAddr) {
+		panic(fmt.Sprintf("invalid eth_swap_contract_addr: %s", cfg.ETHSwapAgentAddr))
 	}
 	if cfg.ETHConfirmNum <= 0 {
 		panic("bsc_confirm_num should be larger than 0")

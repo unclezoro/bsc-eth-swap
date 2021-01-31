@@ -7,40 +7,38 @@ import (
 	"encoding/hex"
 	"fmt"
 	"math/big"
-	"strconv"
 	"strings"
 	"time"
 
-	"github.com/ethereum/go-ethereum"
-	"github.com/ethereum/go-ethereum/rlp"
+	"github.com/jinzhu/gorm"
 
-	tsssdktypes "github.com/binance-chain/tss-zerotrust-sdk/types"
+	"github.com/ethereum/go-ethereum/accounts/abi"
 	ethcom "github.com/ethereum/go-ethereum/common"
 	"github.com/ethereum/go-ethereum/core"
 	"github.com/ethereum/go-ethereum/core/types"
 	"github.com/ethereum/go-ethereum/ethclient"
-	"github.com/jinzhu/gorm"
 
+
+	sabi "github.com/binance-chain/bsc-eth-swap/abi"
 	"github.com/binance-chain/bsc-eth-swap/common"
 	"github.com/binance-chain/bsc-eth-swap/model"
-	"github.com/binance-chain/bsc-eth-swap/swap/erc20"
 	"github.com/binance-chain/bsc-eth-swap/util"
 )
 
-// NewSwapper returns the Swapper instance
-func NewSwapper(db *gorm.DB, cfg *util.Config, bscClient, ethClient *ethclient.Client) (*Swapper, error) {
-	tokens := make([]model.Token, 0)
-	db.Where("available = ?", true).Find(&tokens)
+// NewSwapEngine returns the swapEngine instance
+func NewSwapEngine(db *gorm.DB, cfg *util.Config, bscClient, ethClient *ethclient.Client) (*SwapEngine, error) {
+	pairs := make([]model.SwapPair, 0)
+	db.Find(&pairs)
 
-	tokenInstances, err := buildTokenInstance(tokens, cfg)
+	swapPairInstances, err := buildSwapPairInstance(pairs)
 	if err != nil {
 		return nil, err
 	}
-	bscContractAddrToSymbol := make(map[string]string)
-	ethContractAddrToSymbol := make(map[string]string)
-	for _, token := range tokens {
-		bscContractAddrToSymbol[token.BSCTokenContractAddr] = token.Symbol
-		ethContractAddrToSymbol[token.ETHTokenContractAddr] = token.Symbol
+	bscContractAddrToEthContractAddr := make(map[ethcom.Address]ethcom.Address)
+	ethContractAddrToBscContractAddr := make(map[ethcom.Address]ethcom.Address)
+	for _, token := range pairs {
+		bscContractAddrToEthContractAddr[ethcom.HexToAddress(token.BSCTokenContractAddr)] = ethcom.HexToAddress(token.ETHTokenContractAddr)
+		ethContractAddrToBscContractAddr[ethcom.HexToAddress(token.ETHTokenContractAddr)] = ethcom.HexToAddress(token.BSCTokenContractAddr)
 	}
 
 	keyConfig, err := GetKeyConfig(cfg)
@@ -57,133 +55,137 @@ func NewSwapper(db *gorm.DB, cfg *util.Config, bscClient, ethClient *ethclient.C
 	ethChainID, err := ethClient.ChainID(context.Background())
 	if err != nil {
 		return nil, err
-
+	}
+	ethSwapAgentAbi, err := abi.JSON(strings.NewReader(sabi.ETHSwapAgentABI))
+	if err != nil {
+		return nil, err
 	}
 
-	swapper := &Swapper{
-		DB:                      db,
-		Config:                  cfg,
-		HMACKey:                 keyConfig.HMACKey,
-		TSSClientSecureConfig:   NewClientSecureConfig(keyConfig),
-		BSCClient:               bscClient,
-		ETHClient:               ethClient,
-		BSCChainID:              bscChainID.Int64(),
-		ETHChainID:              ethChainID.Int64(),
-		BSCTxSender:             ethcom.HexToAddress(cfg.KeyManagerConfig.BSCAccountAddr),
-		ETHTxSender:             ethcom.HexToAddress(cfg.KeyManagerConfig.ETHAccountAddr),
-		TokenInstances:          tokenInstances,
-		BSCContractAddrToSymbol: bscContractAddrToSymbol,
-		ETHContractAddrToSymbol: ethContractAddrToSymbol,
-		NewTokenSignal:          make(chan string),
+	bscSwapAgentAbi, err := abi.JSON(strings.NewReader(sabi.BSCSwapAgentABI))
+	if err != nil {
+		return nil, err
 	}
 
-	return swapper, nil
+	swapEngine := &SwapEngine{
+		db:                    db,
+		config:                cfg,
+		hmacCKey:              keyConfig.HMACKey,
+		tssClientSecureConfig: NewClientSecureConfig(keyConfig),
+		bscClient:             bscClient,
+		ethClient:            ethClient,
+		bscChainID:           bscChainID.Int64(),
+		ethChainID:           ethChainID.Int64(),
+		bscTxSender:          ethcom.HexToAddress(cfg.KeyManagerConfig.BSCAccountAddr),
+		ethTxSender:          ethcom.HexToAddress(cfg.KeyManagerConfig.ETHAccountAddr),
+		swapPairs:            swapPairInstances,
+		bscToEthContractAddr: bscContractAddrToEthContractAddr,
+		ethToBscContractAddr: ethContractAddrToBscContractAddr,
+		newSwapPairSignal:    make(chan ethcom.Address),
+		ethSwapAgentAbi:      &ethSwapAgentAbi,
+		bscSwapAgentABi:      &bscSwapAgentAbi,
+		ethSwapAgent:         ethcom.HexToAddress(cfg.ChainConfig.ETHSwapAgentAddr),
+		bscSwapAgent:         ethcom.HexToAddress(cfg.ChainConfig.BSCSwapAgentAddr),
+	}
+
+	return swapEngine, nil
 }
 
-func (swapper *Swapper) Start() {
-	go swapper.monitorSwapRequestDaemon()
-	go swapper.confirmSwapRequestDaemon()
-	go swapper.createSwapDaemon()
-	go swapper.trackSwapTxDaemon()
-	go swapper.alertDaemon()
+func (engine *SwapEngine) Start() {
+	go engine.monitorSwapRequestDaemon()
+	go engine.confirmSwapRequestDaemon()
+	go engine.createSwapDaemon()
+	go engine.trackSwapTxDaemon()
 }
 
-func (swapper *Swapper) monitorSwapRequestDaemon() {
+func (engine *SwapEngine) monitorSwapRequestDaemon() {
 	for {
-		txEventLogs := make([]model.TxEventLog, 0)
-		swapper.DB.Where("phase = ?", model.SeenSwapRequest).Order("height asc").Limit(BatchSize).Find(&txEventLogs)
+		swapStartTxLogs := make([]model.SwapStartTxLog, 0)
+		engine.db.Where("phase = ?", model.SeenRequest).Order("height asc").Limit(BatchSize).Find(&swapStartTxLogs)
 
-		if len(txEventLogs) == 0 {
+		if len(swapStartTxLogs) == 0 {
 			time.Sleep(SleepTime * time.Second)
 			continue
 		}
 
-		for _, txEventLog := range txEventLogs {
-			swap := swapper.createSwap(&txEventLog)
+		for _, swapEventLog := range swapStartTxLogs {
+			swap := engine.createSwap(&swapEventLog)
 			writeDBErr := func() error {
-				tx := swapper.DB.Begin()
+				tx := engine.db.Begin()
 				if err := tx.Error; err != nil {
 					return err
 				}
-				if err := swapper.insertSwap(tx, swap); err != nil {
+				if err := engine.insertSwap(tx, swap); err != nil {
 					tx.Rollback()
 					return err
 				}
-				tx.Model(model.TxEventLog{}).Where("tx_hash = ?", swap.DepositTxHash).Updates(
+				tx.Model(model.SwapStartTxLog{}).Where("tx_hash = ?", swap.StartTxHash).Updates(
 					map[string]interface{}{
-						"phase":       model.ConfirmSwapRequest,
+						"phase":       model.ConfirmRequest,
 						"update_time": time.Now().Unix(),
 					})
 				return tx.Commit().Error
 			}()
 
 			if writeDBErr != nil {
-				util.Logger.Errorf("write DB error: %s", writeDBErr.Error())
-				util.SendTelegramMessage(fmt.Sprintf("write DB error: %s", writeDBErr.Error()))
+				util.Logger.Errorf("write db error: %s", writeDBErr.Error())
+				util.SendTelegramMessage(fmt.Sprintf("write db error: %s", writeDBErr.Error()))
 			}
 		}
 	}
 }
 
-func (swapper *Swapper) getSwapHMAC(swap *model.Swap) string {
+func (engine *SwapEngine) getSwapHMAC(swap *model.Swap) string {
 	material := fmt.Sprintf("%s#%s#%s#%s#%d#%s#%s#%s#%s",
-		swap.Status, swap.Sponsor, swap.Symbol, swap.Amount, swap.Decimals, swap.Direction, swap.DepositTxHash, swap.WithdrawTxHash, swap.RefundTxHash)
-	mac := hmac.New(sha256.New, []byte(swapper.HMACKey))
+		swap.Status, swap.Sponsor, swap.BscContractAddr, swap.Amount, swap.Decimals, swap.Direction, swap.StartTxHash, swap.FillTxHash, swap.RefundTxHash)
+	mac := hmac.New(sha256.New, []byte(engine.hmacCKey))
 	mac.Write([]byte(material))
 
 	return hex.EncodeToString(mac.Sum(nil))
 }
 
-func (swapper *Swapper) verifySwap(swap *model.Swap) bool {
-	return swap.RecordHash == swapper.getSwapHMAC(swap)
+func (engine *SwapEngine) verifySwap(swap *model.Swap) bool {
+	return swap.RecordHash == engine.getSwapHMAC(swap)
 }
 
-func (swapper *Swapper) insertSwap(tx *gorm.DB, swap *model.Swap) error {
-	swap.RecordHash = swapper.getSwapHMAC(swap)
+func (engine *SwapEngine) insertSwap(tx *gorm.DB, swap *model.Swap) error {
+	swap.RecordHash = engine.getSwapHMAC(swap)
 	return tx.Create(swap).Error
 }
 
-func (swapper *Swapper) createSwap(txEventLog *model.TxEventLog) *model.Swap {
-	swapper.Mutex.Lock()
-	defer swapper.Mutex.Unlock()
+func (engine *SwapEngine) createSwap(txEventLog *model.SwapStartTxLog) *model.Swap {
+	engine.mutex.Lock()
+	defer engine.mutex.Unlock()
 
 	sponsor := txEventLog.FromAddress
 	amount := txEventLog.Amount
-	depositTxHash := txEventLog.TxHash
+	swapStartTxHash := txEventLog.TxHash
 	swapDirection := SwapEth2BSC
 	if txEventLog.Chain == common.ChainBSC {
 		swapDirection = SwapBSC2Eth
 	}
 
-	symbol := ""
+	bscContractAddr := ethcom.HexToAddress(txEventLog.ContractAddress)
+	var ok bool
 	decimals := 0
 	swapStatus := SwapQuoteRejected
 	err := func() error {
-		var ok bool
 		if txEventLog.Chain == common.ChainETH {
-			symbol, ok = swapper.ETHContractAddrToSymbol[strings.ToLower(txEventLog.ContractAddress)]
-			if !ok {
+			if bscContractAddr, ok = engine.ethToBscContractAddr[ethcom.HexToAddress(txEventLog.ContractAddress)]; !ok {
 				return fmt.Errorf("unsupported eth token contract address: %s", txEventLog.ContractAddress)
 			}
-		} else {
-			symbol, ok = swapper.BSCContractAddrToSymbol[strings.ToLower(txEventLog.ContractAddress)]
-			if !ok {
-				return fmt.Errorf("unsupported bsc token contract address: %s", txEventLog.ContractAddress)
-			}
 		}
-		tokenInstance, ok := swapper.TokenInstances[symbol]
+		pairInstance, ok := engine.swapPairs[bscContractAddr]
 		if !ok {
-			return fmt.Errorf("unsupported token symbol %s", symbol)
+			return fmt.Errorf("unsupported swap pair %s", bscContractAddr.String())
 		}
-		decimals = tokenInstance.Decimals
-
+		decimals = pairInstance.Decimals
 		swapAmount := big.NewInt(0)
 		_, ok = swapAmount.SetString(txEventLog.Amount, 10)
 		if !ok {
 			return fmt.Errorf("unrecongnized swap amount: %s", txEventLog.Amount)
 		}
-		if swapAmount.Cmp(tokenInstance.LowBound) < 0 || swapAmount.Cmp(tokenInstance.UpperBound) > 0 {
-			return fmt.Errorf("swap amount is out of bound, expected bound [%s, %s]", tokenInstance.LowBound.String(), tokenInstance.UpperBound.String())
+		if swapAmount.Cmp(pairInstance.LowBound) < 0 || swapAmount.Cmp(pairInstance.UpperBound) > 0 {
+			return fmt.Errorf("swap amount is out of bound, expected bound [%s, %s]", pairInstance.LowBound.String(), pairInstance.UpperBound.String())
 		}
 
 		swapStatus = SwapTokenReceived
@@ -196,24 +198,24 @@ func (swapper *Swapper) createSwap(txEventLog *model.TxEventLog) *model.Swap {
 	}
 
 	swap := &model.Swap{
-		Status:         swapStatus,
-		Sponsor:        sponsor,
-		Symbol:         symbol,
-		Amount:         amount,
-		Decimals:       decimals,
-		Direction:      swapDirection,
-		DepositTxHash:  depositTxHash,
-		WithdrawTxHash: "",
-		Log:            log,
+		Status:          swapStatus,
+		Sponsor:         sponsor,
+		BscContractAddr: bscContractAddr.String(),
+		Amount:          amount,
+		Decimals:        decimals,
+		Direction:       swapDirection,
+		StartTxHash:     swapStartTxHash,
+		FillTxHash:      "",
+		Log:             log,
 	}
 
 	return swap
 }
 
-func (swapper *Swapper) confirmSwapRequestDaemon() {
+func (engine *SwapEngine) confirmSwapRequestDaemon() {
 	for {
-		txEventLogs := make([]model.TxEventLog, 0)
-		swapper.DB.Where("status = ? and phase = ?", model.TxStatusConfirmed, model.ConfirmSwapRequest).
+		txEventLogs := make([]model.SwapStartTxLog, 0)
+		engine.db.Where("status = ? and phase = ?", model.TxStatusConfirmed, model.ConfirmRequest).
 			Order("height asc").Limit(BatchSize).Find(&txEventLogs)
 
 		if len(txEventLogs) == 0 {
@@ -225,269 +227,203 @@ func (swapper *Swapper) confirmSwapRequestDaemon() {
 
 		for _, txEventLog := range txEventLogs {
 			swap := model.Swap{}
-			swapper.DB.Where("deposit_tx_hash = ?", txEventLog.TxHash).First(&swap)
-			if swap.DepositTxHash == "" {
-				util.Logger.Errorf("unexpected error, can't find swap by deposit hash: %s", txEventLog.TxHash)
-				util.SendTelegramMessage(fmt.Sprintf("unexpected error, can't find swap by deposit hash: %s", txEventLog.TxHash))
+			engine.db.Where("start_tx_hash = ?", txEventLog.TxHash).First(&swap)
+			if swap.StartTxHash == "" {
+				util.Logger.Errorf("unexpected error, can't find swap by start hash: %s", txEventLog.TxHash)
+				util.SendTelegramMessage(fmt.Sprintf("unexpected error, can't find swap by start hash: %s", txEventLog.TxHash))
 				continue
 			}
 
-			if !swapper.verifySwap(&swap) {
-				util.Logger.Errorf("verify hmac of swap failed: %s", swap.DepositTxHash)
-				util.SendTelegramMessage(fmt.Sprintf("Urgent alert: verify hmac of swap failed: %s", swap.DepositTxHash))
+			if !engine.verifySwap(&swap) {
+				util.Logger.Errorf("verify hmac of swap failed: %s", swap.StartTxHash)
+				util.SendTelegramMessage(fmt.Sprintf("Urgent alert: verify hmac of swap failed: %s", swap.StartTxHash))
 				continue
 			}
 
 			writeDBErr := func() error {
-				tx := swapper.DB.Begin()
+				tx := engine.db.Begin()
 				if err := tx.Error; err != nil {
 					return err
 				}
 				if swap.Status == SwapTokenReceived {
-					swap.Status = SwapQuoteConfirmed
-					swapper.updateSwap(tx, &swap)
+					swap.Status = SwapConfirmed
+					engine.updateSwap(tx, &swap)
 				}
 
-				tx.Model(model.TxEventLog{}).Where("id = ?", txEventLog.Id).Updates(
+				tx.Model(model.SwapStartTxLog{}).Where("id = ?", txEventLog.Id).Updates(
 					map[string]interface{}{
-						"phase":       model.AckSwapRequest,
+						"phase":       model.AckRequest,
 						"update_time": time.Now().Unix(),
 					})
 				return tx.Commit().Error
 			}()
 
 			if writeDBErr != nil {
-				util.Logger.Errorf("write DB error: %s", writeDBErr.Error())
-				util.SendTelegramMessage(fmt.Sprintf("write DB error: %s", writeDBErr.Error()))
+				util.Logger.Errorf("write db error: %s", writeDBErr.Error())
+				util.SendTelegramMessage(fmt.Sprintf("write db error: %s", writeDBErr.Error()))
 			}
 		}
 	}
 }
 
-func (swapper *Swapper) updateSwap(tx *gorm.DB, swap *model.Swap) {
-	swap.RecordHash = swapper.getSwapHMAC(swap)
+func (engine *SwapEngine) updateSwap(tx *gorm.DB, swap *model.Swap) {
+	swap.RecordHash = engine.getSwapHMAC(swap)
 
 	tx.Save(swap)
 }
 
-func (swapper *Swapper) createSwapDaemon() {
-	// start initial token swap daemon
-	for symbol, tokenInstance := range swapper.TokenInstances {
-		go swapper.swapInstanceDaemon(symbol, SwapEth2BSC, tokenInstance)
-		go swapper.swapInstanceDaemon(symbol, SwapBSC2Eth, tokenInstance)
+func (engine *SwapEngine) createSwapDaemon() {
+	// start initial swap pair daemon
+	for _, swapPairInstance := range engine.swapPairs {
+		go engine.swapInstanceDaemon(SwapEth2BSC, swapPairInstance)
+		go engine.swapInstanceDaemon(SwapBSC2Eth, swapPairInstance)
 	}
 	// start new swap daemon for admin
-	for symbol := range swapper.NewTokenSignal {
+	for bscContractAddr := range engine.newSwapPairSignal {
 		func() {
-			swapper.Mutex.RLock()
-			defer swapper.Mutex.RUnlock()
+			engine.mutex.RLock()
+			defer engine.mutex.RUnlock()
 
-			util.Logger.Infof("start new swap daemon for %s", symbol)
-			tokenInstance, ok := swapper.TokenInstances[symbol]
+			util.Logger.Infof("start new swap daemon for %s", bscContractAddr)
+			tokenInstance, ok := engine.swapPairs[bscContractAddr]
 			if !ok {
-				util.Logger.Errorf("unexpected error, can't find token install for symbol %s", symbol)
-				util.SendTelegramMessage(fmt.Sprintf("unexpected error, can't find token install for symbol %s", symbol))
+				util.Logger.Errorf("unexpected error, can't find token install for bsc contract %s", bscContractAddr)
+				util.SendTelegramMessage(fmt.Sprintf("unexpected error, can't find token install for bsc contract %s", bscContractAddr))
 			} else {
-				go swapper.swapInstanceDaemon(symbol, SwapEth2BSC, tokenInstance)
-				go swapper.swapInstanceDaemon(symbol, SwapBSC2Eth, tokenInstance)
+				go engine.swapInstanceDaemon(SwapEth2BSC, tokenInstance)
+				go engine.swapInstanceDaemon(SwapBSC2Eth, tokenInstance)
 			}
 		}()
 	}
 	select {}
 }
 
-func (swapper *Swapper) swapInstanceDaemon(symbol string, direction common.SwapDirection, tokenInstance *TokenInstance) {
-	util.Logger.Infof("start swap daemon for %s, direction %s", symbol, direction)
-	isETHTokenBalanceLowerThreshold := tokenInstance.IsETHTokenBalanceLowerThreshold
-	isBSCTokenBalanceLowerThreshold := tokenInstance.IsBSCTokenBalanceLowerThreshold
+func (engine *SwapEngine) swapInstanceDaemon(direction common.SwapDirection, swapPairInstance *SwapPairIns) {
+	bscContract := swapPairInstance.BSCTokenContractAddr
+	util.Logger.Infof("start swap daemon for bsc token %s, direction %s", bscContract, direction)
 	for {
-		select {
-		case <-tokenInstance.CloseSignal:
-			util.Logger.Infof("close swap daemon for %s, direction %s", symbol, direction)
-			util.SendTelegramMessage(fmt.Sprintf("close swap daemon for %s, direction %s", symbol, direction))
-			return
-		case newValue := <-tokenInstance.ETHTokenBalanceLowerThresholdSignal:
-			isETHTokenBalanceLowerThreshold = newValue
-		case newValue := <-tokenInstance.BSCTokenBalanceLowerThresholdSignal:
-			isBSCTokenBalanceLowerThreshold = newValue
-		default:
-		}
 
 		swaps := make([]model.Swap, 0)
-		swapper.DB.Where("status in (?) and symbol = ? and direction = ?", []common.SwapStatus{SwapQuoteConfirmed, SwapQuoteSending}, symbol, direction).Order("id asc").Limit(BatchSize).Find(&swaps)
+		engine.db.Where("status in (?) and bsc_contract_addr = ? and direction = ?", []common.SwapStatus{SwapConfirmed, SwapSending}, bscContract.String(), direction).Order("id asc").Limit(BatchSize).Find(&swaps)
 
 		if len(swaps) == 0 {
 			time.Sleep(SwapSleepSecond * time.Second)
 			continue
 		}
 
-		util.Logger.Infof("found %d confirmed swap requests on token %s", len(swaps), symbol)
+		util.Logger.Infof("found %d confirmed swap requests on token %s", len(swaps), bscContract.String())
 
 		for _, swap := range swaps {
-			if !swapper.verifySwap(&swap) {
-				util.Logger.Errorf("verify hmac of swap failed: %s", swap.DepositTxHash)
-				util.SendTelegramMessage(fmt.Sprintf("Urgent alert: verify hmac of swap failed: %s", swap.DepositTxHash))
+			if !engine.verifySwap(&swap) {
+				util.Logger.Errorf("verify hmac of swap failed: %s", swap.StartTxHash)
+				util.SendTelegramMessage(fmt.Sprintf("Urgent alert: verify hmac of swap failed: %s", swap.StartTxHash))
 				continue
 			}
 
 			skip, writeDBErr := func() (bool, error) {
 				isSkip := false
-				tx := swapper.DB.Begin()
+				tx := engine.db.Begin()
 				if err := tx.Error; err != nil {
 					return false, err
 				}
-				if swap.Status == SwapQuoteSending {
-					var swapTx model.SwapTx
-					swapper.DB.Where("deposit_tx_hash = ?", swap.DepositTxHash).First(&swapTx)
-					if swapTx.DepositTxHash == "" {
-						util.Logger.Infof("retry swap, deposit tx hash %s", swap.DepositTxHash)
+				if swap.Status == SwapSending {
+					var swapTx model.SwapFillTx
+					engine.db.Where("start_swap_tx_hash = ?", swap.StartTxHash).First(&swapTx)
+					if swapTx.StartSwapTxHash == "" {
+						util.Logger.Infof("retry swap, start tx hash %s", swap.StartTxHash)
 						tx.Model(model.Swap{}).Where("id = ?", swap.ID).Updates(
 							map[string]interface{}{
 								"log":        "retry swap",
 								"updated_at": time.Now().Unix(),
 							})
 					} else {
-						tx.Model(model.SwapTx{}).Where("id = ?", swapTx.ID).Updates(
+						tx.Model(model.SwapFillTx{}).Where("id = ?", swapTx.ID).Updates(
 							map[string]interface{}{
-								"status":     model.WithdrawTxSent,
+								"status":     model.FillTxSent,
 								"updated_at": time.Now().Unix(),
 							})
 
 						// update swap
 						swap.Status = SwapSent
-						swap.WithdrawTxHash = swapTx.WithdrawTxHash
-						swapper.updateSwap(tx, &swap)
+						swap.FillTxHash = swapTx.FillSwapTxHash
+						engine.updateSwap(tx, &swap)
 
 						isSkip = true
 					}
 				} else {
-					swap.Status = SwapQuoteSending
-					swapper.updateSwap(tx, &swap)
+					swap.Status = SwapSending
+					engine.updateSwap(tx, &swap)
 				}
 				return isSkip, tx.Commit().Error
 			}()
 			if writeDBErr != nil {
-				util.Logger.Errorf("write DB error: %s", writeDBErr.Error())
-				util.SendTelegramMessage(fmt.Sprintf("write DB error: %s", writeDBErr.Error()))
+				util.Logger.Errorf("write db error: %s", writeDBErr.Error())
+				util.SendTelegramMessage(fmt.Sprintf("write db error: %s", writeDBErr.Error()))
 				continue
 			}
 			if skip {
-				util.Logger.Infof("skip this swap, deposit tx hash %s", swap.DepositTxHash)
+				util.Logger.Infof("skip this swap, start tx hash %s", swap.StartTxHash)
 				continue
 			}
 
-			util.Logger.Infof("do swap token %s , direction %s, sponsor: %s, amount %s, decimals %d,", symbol, direction, swap.Sponsor, swap.Amount, swap.Decimals)
-			swapTx, swapErr := swapper.doSwap(&swap, tokenInstance, isBSCTokenBalanceLowerThreshold, isETHTokenBalanceLowerThreshold)
+			util.Logger.Infof("do swap token %s , direction %s, sponsor: %s, amount %s, decimals %d,", bscContract.String(), direction, swap.Sponsor, swap.Amount, swap.Decimals)
+			swapTx, swapErr := engine.doSwap(&swap, swapPairInstance)
 
 			writeDBErr = func() error {
-				tx := swapper.DB.Begin()
+				tx := engine.db.Begin()
 				if err := tx.Error; err != nil {
 					return err
 				}
 				if swapErr != nil {
-					util.Logger.Errorf("do swap failed: %s, deposit hash %s", swapErr.Error(), swap.DepositTxHash)
+					util.Logger.Errorf("do swap failed: %s, start hash %s", swapErr.Error(), swap.StartTxHash)
 					if swapErr.Error() == core.ErrReplaceUnderpriced.Error() {
 						// retry this swap
-						swap.Status = SwapQuoteConfirmed
+						swap.Status = SwapConfirmed
 						swap.Log = fmt.Sprintf("do swap failure: %s", swapErr.Error())
 
-						swapper.updateSwap(tx, &swap)
+						engine.updateSwap(tx, &swap)
 					} else {
-						util.SendTelegramMessage(fmt.Sprintf("do swap failed: %s, deposit hash %s", swapErr.Error(), swap.DepositTxHash))
-						withdrawTxHash := ""
+						util.SendTelegramMessage(fmt.Sprintf("do swap failed: %s, start hash %s", swapErr.Error(), swap.StartTxHash))
+						fillTxHash := ""
 						if swapTx != nil {
-							withdrawTxHash = swapTx.WithdrawTxHash
+							fillTxHash = swapTx.FillSwapTxHash
 						}
 
 						swap.Status = SwapSendFailed
-						swap.WithdrawTxHash = withdrawTxHash
+						swap.FillTxHash = fillTxHash
 						swap.Log = fmt.Sprintf("do swap failure: %s", swapErr.Error())
-						swapper.updateSwap(tx, &swap)
+						engine.updateSwap(tx, &swap)
 					}
 				} else {
-					tx.Model(model.SwapTx{}).Where("id = ?", swapTx.ID).Updates(
+					tx.Model(model.SwapFillTx{}).Where("id = ?", swapTx.ID).Updates(
 						map[string]interface{}{
-							"status":     model.WithdrawTxSent,
+							"status":     model.FillTxSent,
 							"updated_at": time.Now().Unix(),
 						})
 
 					swap.Status = SwapSent
-					swap.WithdrawTxHash = swapTx.WithdrawTxHash
-					swapper.updateSwap(tx, &swap)
+					swap.FillTxHash = swapTx.FillSwapTxHash
+					engine.updateSwap(tx, &swap)
 				}
 
 				return tx.Commit().Error
 			}()
 
 			if writeDBErr != nil {
-				util.Logger.Errorf("write DB error: %s", writeDBErr.Error())
-				util.SendTelegramMessage(fmt.Sprintf("write DB error: %s", writeDBErr.Error()))
+				util.Logger.Errorf("write db error: %s", writeDBErr.Error())
+				util.SendTelegramMessage(fmt.Sprintf("write db error: %s", writeDBErr.Error()))
 			}
 
 			if swap.Direction == SwapEth2BSC {
-				time.Sleep(time.Duration(swapper.Config.ChainConfig.BSCWaitMilliSecBetweenSwaps) * time.Millisecond)
+				time.Sleep(time.Duration(engine.config.ChainConfig.BSCWaitMilliSecBetweenSwaps) * time.Millisecond)
 			} else {
-				time.Sleep(time.Duration(swapper.Config.ChainConfig.ETHWaitMilliSecBetweenSwaps) * time.Millisecond)
+				time.Sleep(time.Duration(engine.config.ChainConfig.ETHWaitMilliSecBetweenSwaps) * time.Millisecond)
 			}
 		}
 	}
 }
 
-func (swapper *Swapper) buildSignedTransaction(network string, contract ethcom.Address, ethClient *ethclient.Client, recipient ethcom.Address, amount *big.Int) (*types.Transaction, error) {
-	txSender := swapper.ETHTxSender
-	if network == common.ChainBSC {
-		txSender = swapper.BSCTxSender
-	}
-
-	nonce, err := ethClient.PendingNonceAt(context.Background(), txSender)
-	if err != nil {
-		return nil, err
-	}
-	gasPrice, err := ethClient.SuggestGasPrice(context.Background())
-	if err != nil {
-		return nil, err
-	}
-	value := big.NewInt(0)
-	txInput, err := abiEncodeTransfer(recipient, amount)
-	if err != nil {
-		return nil, err
-	}
-	msg := ethereum.CallMsg{From: txSender, To: &contract, GasPrice: gasPrice, Value: value, Data: txInput}
-	gasLimit, err := ethClient.EstimateGas(context.Background(), msg)
-	if err != nil {
-		return nil, fmt.Errorf("failed to estimate gas needed: %v", err)
-	}
-
-	chainId, err := ethClient.ChainID(context.Background())
-	if err != nil {
-		return nil, fmt.Errorf("failed to get chainid: %v", err)
-	}
-
-	var signedRawTx *tsssdktypes.SignResponse
-	if network == common.ChainBSC {
-		signedRawTx, err = signBSC(swapper.TSSClientSecureConfig, swapper.Config.KeyManagerConfig.Endpoint, txSender.String(),
-			recipient.String(), amount.String(), contract.String(), "", chainId.Int64(), int64(nonce), gasPrice.String(), strconv.Itoa(int(gasLimit)), true)
-		if err != nil {
-			return nil, fmt.Errorf("TSS server failure: %v", err)
-		}
-	} else {
-		signedRawTx, err = signETH(swapper.TSSClientSecureConfig, swapper.Config.KeyManagerConfig.Endpoint, txSender.String(),
-			recipient.String(), amount.String(), contract.String(), "", chainId.Int64(), int64(nonce), gasPrice.String(), strconv.Itoa(int(gasLimit)), true)
-		if err != nil {
-			return nil, fmt.Errorf("TSS server failure: %v", err)
-		}
-	}
-
-	var signedTx types.Transaction
-	err = rlp.DecodeBytes(ethcom.FromHex(signedRawTx.RawTransaction), &signedTx)
-	if err != nil {
-		return nil, fmt.Errorf("failed to decode TSS signed result: %v", err)
-	}
-
-	return &signedTx, nil
-}
-
-func (swapper *Swapper) doSwap(swap *model.Swap, tokenInstance *TokenInstance, isBSCTokenBalanceLowerThreshold, isETHTokenBalanceLowerThreshold bool) (*model.SwapTx, error) {
+func (engine *SwapEngine) doSwap(swap *model.Swap, swapPairInstance *SwapPairIns) (*model.SwapFillTx, error) {
 	amount := big.NewInt(0)
 	_, ok := amount.SetString(swap.Amount, 10)
 	if !ok {
@@ -495,120 +431,118 @@ func (swapper *Swapper) doSwap(swap *model.Swap, tokenInstance *TokenInstance, i
 	}
 
 	if swap.Direction == SwapEth2BSC {
-		swapper.ETHBSCSwapMutex.Lock()
-		defer swapper.ETHBSCSwapMutex.Unlock()
-
-		if isBSCTokenBalanceLowerThreshold {
-			return nil, fmt.Errorf("BSC token %s balance is under threshold %s", tokenInstance.Symbol, tokenInstance.BSCERC20Threshold.String())
-		}
-		signedTx, err := swapper.buildSignedTransaction(common.ChainBSC, tokenInstance.BSCTokenContractAddr, swapper.BSCClient, ethcom.HexToAddress(swap.Sponsor), amount)
+		bscClientMutex.Lock()
+		defer bscClientMutex.Unlock()
+		data, err := abiEncodeFillETH2BSCSwap(ethcom.HexToHash(swap.StartTxHash), swapPairInstance.BSCTokenContractAddr, ethcom.HexToAddress(swap.Sponsor), amount, engine.bscSwapAgentABi)
 		if err != nil {
 			return nil, err
 		}
-		swapTx := &model.SwapTx{
-			Direction:      SwapEth2BSC,
-			DepositTxHash:  swap.DepositTxHash,
-			WithdrawTxHash: signedTx.Hash().String(),
-			GasPrice:       signedTx.GasPrice().String(),
-			Status:         model.WithdrawTxCreated,
-		}
-		err = swapper.insertSwapTxToDB(swapTx)
+		signedTx, err := buildSignedTransaction(common.ChainBSC, engine.bscTxSender, engine.bscSwapAgent, engine.bscClient, data, engine.tssClientSecureConfig, engine.config.KeyManagerConfig.Endpoint)
 		if err != nil {
 			return nil, err
 		}
-		err = swapper.BSCClient.SendTransaction(context.Background(), signedTx)
+		swapTx := &model.SwapFillTx{
+			Direction:       SwapEth2BSC,
+			StartSwapTxHash: swap.StartTxHash,
+			FillSwapTxHash:  signedTx.Hash().String(),
+			GasPrice:        signedTx.GasPrice().String(),
+			Status:          model.FillTxCreated,
+		}
+		err = engine.insertSwapTxToDB(swapTx)
+		if err != nil {
+			return nil, err
+		}
+		err = engine.bscClient.SendTransaction(context.Background(), signedTx)
 		if err != nil {
 			util.Logger.Errorf("broadcast tx to BSC error: %s", err.Error())
 			return nil, err
 		}
-		util.Logger.Infof("Send transaction to BSC, %s/%s", swapper.Config.ChainConfig.BSCExplorerUrl, signedTx.Hash().String())
+		util.Logger.Infof("Send transaction to BSC, %s/%s", engine.config.ChainConfig.BSCExplorerUrl, signedTx.Hash().String())
 		return swapTx, nil
 	} else {
-		swapper.BSCETHSwapMutex.Lock()
-		defer swapper.BSCETHSwapMutex.Unlock()
-		if isETHTokenBalanceLowerThreshold {
-			return nil, fmt.Errorf("ETH token %s balance is under threshold %s", tokenInstance.Symbol, tokenInstance.ETHERC20Threshold.String())
-		}
-		signedTx, err := swapper.buildSignedTransaction(common.ChainETH, tokenInstance.ETHTokenContractAddr, swapper.ETHClient, ethcom.HexToAddress(swap.Sponsor), amount)
+		ethClientMutex.Lock()
+		defer ethClientMutex.Unlock()
+		data, err := abiEncodeFillBSC2ETHSwap(ethcom.HexToHash(swap.StartTxHash), swapPairInstance.ETHTokenContractAddr, ethcom.HexToAddress(swap.Sponsor), amount, engine.ethSwapAgentAbi)
+		signedTx, err := buildSignedTransaction(common.ChainETH, engine.ethTxSender, engine.ethSwapAgent, engine.ethClient, data, engine.tssClientSecureConfig, engine.config.KeyManagerConfig.Endpoint)
 		if err != nil {
 			return nil, err
 		}
-		swapTx := &model.SwapTx{
-			Direction:      SwapBSC2Eth,
-			DepositTxHash:  swap.DepositTxHash,
-			GasPrice:       signedTx.GasPrice().String(),
-			WithdrawTxHash: signedTx.Hash().String(),
-			Status:         model.WithdrawTxCreated,
+		swapTx := &model.SwapFillTx{
+			Direction:       SwapBSC2Eth,
+			StartSwapTxHash: swap.StartTxHash,
+			GasPrice:        signedTx.GasPrice().String(),
+			FillSwapTxHash:  signedTx.Hash().String(),
+			Status:          model.FillTxCreated,
 		}
-		err = swapper.insertSwapTxToDB(swapTx)
+		err = engine.insertSwapTxToDB(swapTx)
 		if err != nil {
 			return nil, err
 		}
-		err = swapper.ETHClient.SendTransaction(context.Background(), signedTx)
+		err = engine.ethClient.SendTransaction(context.Background(), signedTx)
 		if err != nil {
 			util.Logger.Errorf("broadcast tx to ETH error: %s", err.Error())
 			return nil, err
 		} else {
-			util.Logger.Infof("Send transaction to ETH, %s/%s", swapper.Config.ChainConfig.ETHExplorerUrl, signedTx.Hash().String())
+			util.Logger.Infof("Send transaction to ETH, %s/%s", engine.config.ChainConfig.ETHExplorerUrl, signedTx.Hash().String())
 		}
 		return swapTx, nil
 	}
 }
 
-func (swapper *Swapper) trackSwapTxDaemon() {
+func (engine *SwapEngine) trackSwapTxDaemon() {
 	go func() {
 		for {
 			time.Sleep(SleepTime * time.Second)
 
-			ethSwapTxs := make([]model.SwapTx, 0)
-			swapper.DB.Where("status = ? and direction = ? and track_retry_counter >= ?", model.WithdrawTxSent, SwapBSC2Eth, swapper.Config.ChainConfig.ETHMaxTrackRetry).
+			ethSwapTxs := make([]model.SwapFillTx, 0)
+			engine.db.Where("status = ? and direction = ? and track_retry_counter >= ?", model.FillTxSent, SwapBSC2Eth, engine.config.ChainConfig.ETHMaxTrackRetry).
 				Order("id asc").Limit(TrackSentTxBatchSize).Find(&ethSwapTxs)
 
-			bscSwapTxs := make([]model.SwapTx, 0)
-			swapper.DB.Where("status = ? and direction = ? and track_retry_counter >= ?", model.WithdrawTxSent, SwapEth2BSC, swapper.Config.ChainConfig.BSCMaxTrackRetry).
+			bscSwapTxs := make([]model.SwapFillTx, 0)
+			engine.db.Where("status = ? and direction = ? and track_retry_counter >= ?", model.FillTxSent, SwapEth2BSC, engine.config.ChainConfig.BSCMaxTrackRetry).
 				Order("id asc").Limit(TrackSentTxBatchSize).Find(&bscSwapTxs)
 
 			swapTxs := append(ethSwapTxs, bscSwapTxs...)
 
 			if len(swapTxs) > 0 {
-				util.Logger.Infof("%d withdraw tx are missing, mark these swaps as failed", len(swapTxs))
+				util.Logger.Infof("%d fill tx are missing, mark these swaps as failed", len(swapTxs))
 			}
 
 			for _, swapTx := range swapTxs {
 				chainName := "ETH"
-				maxRetry := swapper.Config.ChainConfig.ETHMaxTrackRetry
+				maxRetry := engine.config.ChainConfig.ETHMaxTrackRetry
 				if swapTx.Direction == SwapEth2BSC {
 					chainName = "BSC"
-					maxRetry = swapper.Config.ChainConfig.BSCMaxTrackRetry
+					maxRetry = engine.config.ChainConfig.BSCMaxTrackRetry
 				}
-				util.Logger.Errorf("The withdraw tx is sent, however, after %d seconds its status is still uncertain. Mark tx as missing and mark swap as failed, chain %s, deposit hash %s", SleepTime*maxRetry, chainName, swapTx.DepositTxHash)
-				util.SendTelegramMessage(fmt.Sprintf("The withdraw tx is sent, however, after %d seconds its status is still uncertain. Mark tx as missing and mark swap as failed, chain %s, deposit hash %s", SleepTime*maxRetry, chainName, swapTx.DepositTxHash))
+				util.Logger.Errorf("The fill tx is sent, however, after %d seconds its status is still uncertain. Mark tx as missing and mark swap as failed, chain %s, fill hash %s", SleepTime*maxRetry, chainName, swapTx.StartSwapTxHash)
+				util.SendTelegramMessage(fmt.Sprintf("The fill tx is sent, however, after %d seconds its status is still uncertain. Mark tx as missing and mark swap as failed, chain %s, start hash %s", SleepTime*maxRetry, chainName, swapTx.StartSwapTxHash))
 
 				writeDBErr := func() error {
-					tx := swapper.DB.Begin()
+					tx := engine.db.Begin()
 					if err := tx.Error; err != nil {
 						return err
 					}
-					tx.Model(model.SwapTx{}).Where("id = ?", swapTx.ID).Updates(
+					tx.Model(model.SwapFillTx{}).Where("id = ?", swapTx.ID).Updates(
 						map[string]interface{}{
-							"status":     model.WithdrawTxMissing,
+							"status":     model.FillTxMissing,
 							"updated_at": time.Now().Unix(),
 						})
 
-					swap, err := swapper.getSwapByDepositTxHash(tx, swapTx.DepositTxHash)
+					swap, err := engine.getSwapByStartTxHash(tx, swapTx.StartSwapTxHash)
 					if err != nil {
 						tx.Rollback()
 						return err
 					}
 					swap.Status = SwapSendFailed
-					swap.Log = fmt.Sprintf("track withdraw tx for more than %d times, the withdraw tx status is still uncertain", maxRetry)
-					swapper.updateSwap(tx, swap)
+					swap.Log = fmt.Sprintf("track fill tx for more than %d times, the fill tx status is still uncertain", maxRetry)
+					engine.updateSwap(tx, swap)
 
 					return tx.Commit().Error
 				}()
 				if writeDBErr != nil {
-					util.Logger.Errorf("write DB error: %s", writeDBErr.Error())
-					util.SendTelegramMessage(fmt.Sprintf("write DB error: %s", writeDBErr.Error()))
+					util.Logger.Errorf("write db error: %s", writeDBErr.Error())
+					util.SendTelegramMessage(fmt.Sprintf("write db error: %s", writeDBErr.Error()))
 				}
 			}
 		}
@@ -618,12 +552,12 @@ func (swapper *Swapper) trackSwapTxDaemon() {
 		for {
 			time.Sleep(SleepTime * time.Second)
 
-			ethSwapTxs := make([]model.SwapTx, 0)
-			swapper.DB.Where("status = ? and direction = ? and track_retry_counter < ?", model.WithdrawTxSent, SwapBSC2Eth, swapper.Config.ChainConfig.ETHMaxTrackRetry).
+			ethSwapTxs := make([]model.SwapFillTx, 0)
+			engine.db.Where("status = ? and direction = ? and track_retry_counter < ?", model.FillTxSent, SwapBSC2Eth, engine.config.ChainConfig.ETHMaxTrackRetry).
 				Order("id asc").Limit(TrackSentTxBatchSize).Find(&ethSwapTxs)
 
-			bscSwapTxs := make([]model.SwapTx, 0)
-			swapper.DB.Where("status = ? and direction = ? and track_retry_counter < ?", model.WithdrawTxSent, SwapEth2BSC, swapper.Config.ChainConfig.BSCMaxTrackRetry).
+			bscSwapTxs := make([]model.SwapFillTx, 0)
+			engine.db.Where("status = ? and direction = ? and track_retry_counter < ?", model.FillTxSent, SwapEth2BSC, engine.config.ChainConfig.BSCMaxTrackRetry).
 				Order("id asc").Limit(TrackSentTxBatchSize).Find(&bscSwapTxs)
 
 			swapTxs := append(ethSwapTxs, bscSwapTxs...)
@@ -639,10 +573,10 @@ func (swapper *Swapper) trackSwapTxDaemon() {
 				var client *ethclient.Client
 				var chainName string
 				if swapTx.Direction == SwapBSC2Eth {
-					client = swapper.ETHClient
+					client = engine.ethClient
 					chainName = "ETH"
 				} else {
-					client = swapper.BSCClient
+					client = engine.bscClient
 					chainName = "BSC"
 				}
 				var txRecipient *types.Receipt
@@ -652,24 +586,24 @@ func (swapper *Swapper) trackSwapTxDaemon() {
 						util.Logger.Debugf("%s, query block failed: %s", chainName, err.Error())
 						return err
 					}
-					txRecipient, err = client.TransactionReceipt(context.Background(), ethcom.HexToHash(swapTx.WithdrawTxHash))
+					txRecipient, err = client.TransactionReceipt(context.Background(), ethcom.HexToHash(swapTx.FillSwapTxHash))
 					if err != nil {
 						util.Logger.Debugf("%s, query tx failed: %s", chainName, err.Error())
 						return err
 					}
-					if block.Number().Int64() < txRecipient.BlockNumber.Int64()+swapper.Config.ChainConfig.ETHConfirmNum {
+					if block.Number().Int64() < txRecipient.BlockNumber.Int64()+engine.config.ChainConfig.ETHConfirmNum {
 						return fmt.Errorf("%s, swap tx is still not finalized", chainName)
 					}
 					return nil
 				}()
 
 				writeDBErr := func() error {
-					tx := swapper.DB.Begin()
+					tx := engine.db.Begin()
 					if err := tx.Error; err != nil {
 						return err
 					}
 					if queryTxStatusErr != nil {
-						tx.Model(model.SwapTx{}).Where("id = ?", swapTx.ID).Updates(
+						tx.Model(model.SwapFillTx{}).Where("id = ?", swapTx.ID).Updates(
 							map[string]interface{}{
 								"track_retry_counter": gorm.Expr("track_retry_counter + 1"),
 								"updated_at":          time.Now().Unix(),
@@ -677,47 +611,47 @@ func (swapper *Swapper) trackSwapTxDaemon() {
 					} else {
 						txFee := big.NewInt(1).Mul(gasPrice, big.NewInt(int64(txRecipient.GasUsed))).String()
 						if txRecipient.Status == TxFailedStatus {
-							util.Logger.Infof(fmt.Sprintf("withdraw tx is failed, chain %s, txHash: %s", chainName, txRecipient.TxHash))
-							util.SendTelegramMessage(fmt.Sprintf("withdraw tx is failed, chain %s, txHash: %s", chainName, txRecipient.TxHash))
-							tx.Model(model.SwapTx{}).Where("id = ?", swapTx.ID).Updates(
+							util.Logger.Infof(fmt.Sprintf("fill tx is failed, chain %s, txHash: %s", chainName, txRecipient.TxHash))
+							util.SendTelegramMessage(fmt.Sprintf("fill tx is failed, chain %s, txHash: %s", chainName, txRecipient.TxHash))
+							tx.Model(model.SwapFillTx{}).Where("id = ?", swapTx.ID).Updates(
 								map[string]interface{}{
-									"status":              model.WithdrawTxFailed,
+									"status":              model.FillTxFailed,
 									"height":              txRecipient.BlockNumber.Int64(),
 									"consumed_fee_amount": txFee,
 									"updated_at":          time.Now().Unix(),
 								})
 
-							swap, err := swapper.getSwapByDepositTxHash(tx, swapTx.DepositTxHash)
+							swap, err := engine.getSwapByStartTxHash(tx, swapTx.StartSwapTxHash)
 							if err != nil {
 								tx.Rollback()
 								return err
 							}
 							swap.Status = SwapSendFailed
-							swap.Log = "withdraw tx is failed"
-							swapper.updateSwap(tx, swap)
+							swap.Log = "fill tx is failed"
+							engine.updateSwap(tx, swap)
 						} else {
-							tx.Model(model.SwapTx{}).Where("id = ?", swapTx.ID).Updates(
+							tx.Model(model.SwapFillTx{}).Where("id = ?", swapTx.ID).Updates(
 								map[string]interface{}{
-									"status":              model.WithdrawTxSuccess,
+									"status":              model.FillTxSuccess,
 									"height":              txRecipient.BlockNumber.Int64(),
 									"consumed_fee_amount": txFee,
 									"updated_at":          time.Now().Unix(),
 								})
 
-							swap, err := swapper.getSwapByDepositTxHash(tx, swapTx.DepositTxHash)
+							swap, err := engine.getSwapByStartTxHash(tx, swapTx.StartSwapTxHash)
 							if err != nil {
 								tx.Rollback()
 								return err
 							}
 							swap.Status = SwapSuccess
-							swapper.updateSwap(tx, swap)
+							engine.updateSwap(tx, swap)
 						}
 					}
 					return tx.Commit().Error
 				}()
 				if writeDBErr != nil {
-					util.Logger.Errorf("update DB failure: %s", writeDBErr.Error())
-					util.SendTelegramMessage(fmt.Sprintf("Upgent alert: update DB failure: %s", writeDBErr.Error()))
+					util.Logger.Errorf("update db failure: %s", writeDBErr.Error())
+					util.SendTelegramMessage(fmt.Sprintf("Upgent alert: update db failure: %s", writeDBErr.Error()))
 				}
 
 			}
@@ -725,118 +659,14 @@ func (swapper *Swapper) trackSwapTxDaemon() {
 	}()
 }
 
-func (swapper *Swapper) getSwapByDepositTxHash(tx *gorm.DB, txHash string) (*model.Swap, error) {
+func (engine *SwapEngine) getSwapByStartTxHash(tx *gorm.DB, txHash string) (*model.Swap, error) {
 	swap := model.Swap{}
-	err := tx.Where("deposit_tx_hash = ?", txHash).First(&swap).Error
+	err := tx.Where("start_tx_hash = ?", txHash).First(&swap).Error
 	return &swap, err
 }
 
-func (swapper *Swapper) alertDaemon() {
-	bnbAlertThreshold := big.NewInt(1)
-	bnbAlertThreshold.SetString(swapper.Config.ChainConfig.BNBAlertThreshold, 10)
-
-	ethAlertThreshold := big.NewInt(1)
-	ethAlertThreshold.SetString(swapper.Config.ChainConfig.ETHAlertThreshold, 10)
-	for {
-		time.Sleep(time.Second * time.Duration(swapper.Config.ChainConfig.BalanceMonitorInterval))
-		bnbBalance, err := swapper.BSCClient.BalanceAt(context.Background(), swapper.BSCTxSender, nil)
-		if err != nil {
-			util.Logger.Errorf(fmt.Sprintf("Failed to query bsc tx sender %s balance: %s", swapper.BSCTxSender.String(), err.Error()))
-			util.SendTelegramMessage(fmt.Sprintf("Failed to query bsc tx sender %s balance: %s", swapper.BSCTxSender.String(), err.Error()))
-		}
-		if bnbBalance.Cmp(bnbAlertThreshold) <= 0 {
-			util.Logger.Infof(fmt.Sprintf("BSC tx sender address %s, bnb balance %s is less than threshold %s", swapper.BSCTxSender.String(), bnbBalance.String(), bnbAlertThreshold.String()))
-			util.SendTelegramMessage(fmt.Sprintf("BSC tx sender address %s, bnb balance %s is less than threshold %s", swapper.BSCTxSender.String(), bnbBalance.String(), bnbAlertThreshold.String()))
-		}
-		ethBalance, err := swapper.ETHClient.BalanceAt(context.Background(), swapper.ETHTxSender, nil)
-		if err != nil {
-			util.Logger.Errorf(fmt.Sprintf("Failed to query eth tx sender %s balance: %s", swapper.ETHTxSender.String(), err.Error()))
-			util.SendTelegramMessage(fmt.Sprintf("Failed to query eth tx sender %s balance: %s", swapper.ETHTxSender.String(), err.Error()))
-		}
-		if ethBalance.Cmp(ethAlertThreshold) <= 0 {
-			util.Logger.Infof(fmt.Sprintf("ETH tx sender address %s, eth balance %s is less than threshold %s", swapper.ETHTxSender.String(), ethBalance.String(), ethAlertThreshold.String()))
-			util.SendTelegramMessage(fmt.Sprintf("ETH tx sender address %s, eth balance %s is less than threshold %s", swapper.ETHTxSender.String(), ethBalance.String(), ethAlertThreshold.String()))
-		}
-
-		for symbol, tokenInstance := range swapper.TokenInstances {
-			bscERC20, err := erc20.NewErc20(tokenInstance.BSCTokenContractAddr, swapper.BSCClient)
-			if err != nil {
-				util.Logger.Errorf(fmt.Sprintf("symbol %s, failed to create bsc erc20 instance: %s", symbol, err.Error()))
-				util.SendTelegramMessage(fmt.Sprintf("symbol %s, failed to create bsc erc20 instance: %s", symbol, err.Error()))
-			}
-
-			bscErc20Balance, err := bscERC20.BalanceOf(getCallOpts(), swapper.BSCTxSender)
-			if err != nil {
-				util.Logger.Errorf(fmt.Sprintf("symbol %s, failed to query bcs erc20 balance: %s", symbol, err.Error()))
-				util.SendTelegramMessage(fmt.Sprintf("symbol %s, failed to query bcs erc20 balance: %s", symbol, err.Error()))
-			} else {
-				if bscErc20Balance.Cmp(tokenInstance.BSCERC20Threshold) <= 0 {
-					toUpdate := map[string]interface{}{
-						"is_bsc_balance_lower_than_threshold": true,
-					}
-					err = swapper.DB.Model(model.Token{}).Where("symbol = ?", tokenInstance.Symbol).Updates(toUpdate).Error
-					if err != nil {
-						util.Logger.Errorf("update token error, err=%s", err.Error())
-					}
-					tokenInstance.BSCTokenBalanceLowerThresholdSignal <- true
-					util.Logger.Infof(fmt.Sprintf("symbol %s, bsc address %s, erc20 contract addr %s, bsc erc20 balance %s is less than threshold %s",
-						symbol, swapper.BSCTxSender.String(), tokenInstance.BSCTokenContractAddr.String(), bscErc20Balance.String(), tokenInstance.BSCERC20Threshold.String()))
-					util.SendTelegramMessage(fmt.Sprintf("symbol %s, bsc address %s, erc20 contract addr %s, bsc erc20 balance %s is less than threshold %s",
-						symbol, swapper.BSCTxSender.String(), tokenInstance.BSCTokenContractAddr.String(), bscErc20Balance.String(), tokenInstance.BSCERC20Threshold.String()))
-				} else if bscErc20Balance.Cmp(big.NewInt(1).Mul(tokenInstance.BSCERC20Threshold, big.NewInt(2))) >= 0 {
-					tokenInstance.BSCTokenBalanceLowerThresholdSignal <- false
-					toUpdate := map[string]interface{}{
-						"is_bsc_balance_lower_than_threshold": false,
-					}
-					err = swapper.DB.Model(model.Token{}).Where("symbol = ?", tokenInstance.Symbol).Updates(toUpdate).Error
-					if err != nil {
-						util.Logger.Errorf("update token error, err=%s", err.Error())
-					}
-				}
-
-			}
-
-			ethERC20, err := erc20.NewErc20(tokenInstance.ETHTokenContractAddr, swapper.ETHClient)
-			if err != nil {
-				util.Logger.Errorf(fmt.Sprintf("symbol %s, failed to create eth erc20 instance: %s", symbol, err.Error()))
-				util.SendTelegramMessage(fmt.Sprintf("symbol %s, failed to create eth erc20 instance: %s", symbol, err.Error()))
-			}
-
-			ethErc20Balance, err := ethERC20.BalanceOf(getCallOpts(), swapper.ETHTxSender)
-			if err != nil {
-				util.Logger.Errorf(fmt.Sprintf("symbol %s, failed to query eth erc20 balance: %s", symbol, err.Error()))
-				util.SendTelegramMessage(fmt.Sprintf("symbol %s, failed to query eth erc20 balance: %s", symbol, err.Error()))
-			} else {
-				if ethErc20Balance.Cmp(tokenInstance.ETHERC20Threshold) <= 0 {
-					toUpdate := map[string]interface{}{
-						"is_eth_balance_lower_than_threshold": true,
-					}
-					err = swapper.DB.Model(model.Token{}).Where("symbol = ?", tokenInstance.Symbol).Updates(toUpdate).Error
-					if err != nil {
-						util.Logger.Errorf("update token error, err=%s", err.Error())
-					}
-					tokenInstance.ETHTokenBalanceLowerThresholdSignal <- true
-					util.Logger.Infof(fmt.Sprintf("symbol %s, eth address %s, erc20 contract addr %s, eth erc20 balance %s is less than threshold %s",
-						symbol, swapper.ETHTxSender.String(), tokenInstance.ETHTokenContractAddr.String(), ethErc20Balance.String(), tokenInstance.ETHERC20Threshold.String()))
-					util.SendTelegramMessage(fmt.Sprintf("symbol %s, eth address %s, erc20 contract addr %s, eth erc20 balance %s is less than threshold %s",
-						symbol, swapper.ETHTxSender.String(), tokenInstance.ETHTokenContractAddr.String(), ethErc20Balance.String(), tokenInstance.ETHERC20Threshold.String()))
-				} else if ethErc20Balance.Cmp(big.NewInt(1).Mul(tokenInstance.ETHERC20Threshold, big.NewInt(2))) >= 0 {
-					tokenInstance.ETHTokenBalanceLowerThresholdSignal <- false
-					toUpdate := map[string]interface{}{
-						"is_eth_balance_lower_than_threshold": false,
-					}
-					err = swapper.DB.Model(model.Token{}).Where("symbol = ?", tokenInstance.Symbol).Updates(toUpdate).Error
-					if err != nil {
-						util.Logger.Errorf("update token error, err=%s", err.Error())
-					}
-				}
-			}
-		}
-	}
-}
-
-func (swapper *Swapper) insertSwapToDB(data *model.Swap) error {
-	tx := swapper.DB.Begin()
+func (engine *SwapEngine) insertSwapToDB(data *model.Swap) error {
+	tx := engine.db.Begin()
 	if err := tx.Error; err != nil {
 		return err
 	}
@@ -849,8 +679,8 @@ func (swapper *Swapper) insertSwapToDB(data *model.Swap) error {
 	return tx.Commit().Error
 }
 
-func (swapper *Swapper) insertSwapTxToDB(data *model.SwapTx) error {
-	tx := swapper.DB.Begin()
+func (engine *SwapEngine) insertSwapTxToDB(data *model.SwapFillTx) error {
+	tx := engine.db.Begin()
 	if err := tx.Error; err != nil {
 		return err
 	}
@@ -863,117 +693,64 @@ func (swapper *Swapper) insertSwapTxToDB(data *model.SwapTx) error {
 	return tx.Commit().Error
 }
 
-func (swapper *Swapper) AddTokenInstance(token *model.Token) error {
+func (engine *SwapEngine) AddSwapPairInstance(swapPair *model.SwapPair) error {
 	lowBound := big.NewInt(0)
-	_, ok := lowBound.SetString(token.LowBound, 10)
+	_, ok := lowBound.SetString(swapPair.LowBound, 10)
 	if !ok {
-		return fmt.Errorf("invalid lowBound amount: %s", token.LowBound)
+		return fmt.Errorf("invalid lowBound amount: %s", swapPair.LowBound)
 	}
 	upperBound := big.NewInt(0)
-	_, ok = upperBound.SetString(token.UpperBound, 10)
+	_, ok = upperBound.SetString(swapPair.UpperBound, 10)
 	if !ok {
-		return fmt.Errorf("invalid upperBound amount: %s", token.LowBound)
+		return fmt.Errorf("invalid upperBound amount: %s", swapPair.LowBound)
 	}
 
-	bscERC20Threshold := big.NewInt(0)
-	bscERC20Threshold.SetString(token.BSCERC20Threshold, 10)
-
-	ethERC20Threshold := big.NewInt(0)
-	ethERC20Threshold.SetString(token.ETHERC20Threshold, 10)
-
-	swapper.Mutex.Lock()
-	defer swapper.Mutex.Unlock()
-	swapper.TokenInstances[token.Symbol] = &TokenInstance{
-		Symbol:   token.Symbol,
-		Name:     token.Name,
-		Decimals: token.Decimals,
-
-		CloseSignal:                         make(chan bool),
-		ETHTokenBalanceLowerThresholdSignal: make(chan bool),
-		BSCTokenBalanceLowerThresholdSignal: make(chan bool),
-
+	engine.mutex.Lock()
+	defer engine.mutex.Unlock()
+	engine.swapPairs[ethcom.HexToAddress(swapPair.BSCTokenContractAddr)] = &SwapPairIns{
+		Symbol:               swapPair.Symbol,
+		Name:                 swapPair.Name,
+		Decimals:             swapPair.Decimals,
 		LowBound:             lowBound,
 		UpperBound:           upperBound,
-		BSCTokenContractAddr: ethcom.HexToAddress(token.BSCTokenContractAddr),
-		BSCERC20Threshold:    bscERC20Threshold,
-		ETHTokenContractAddr: ethcom.HexToAddress(token.ETHTokenContractAddr),
-		ETHERC20Threshold:    ethERC20Threshold,
+		BSCTokenContractAddr: ethcom.HexToAddress(swapPair.BSCTokenContractAddr),
+		ETHTokenContractAddr: ethcom.HexToAddress(swapPair.ETHTokenContractAddr),
 	}
-	swapper.BSCContractAddrToSymbol[strings.ToLower(token.BSCTokenContractAddr)] = token.Symbol
-	swapper.ETHContractAddrToSymbol[strings.ToLower(token.ETHTokenContractAddr)] = token.Symbol
+	engine.bscToEthContractAddr[ethcom.HexToAddress(swapPair.BSCTokenContractAddr)] = ethcom.HexToAddress(swapPair.ETHTokenContractAddr)
+	engine.ethToBscContractAddr[ethcom.HexToAddress(swapPair.ETHTokenContractAddr)] = ethcom.HexToAddress(swapPair.BSCTokenContractAddr)
 
-	swapper.NewTokenSignal <- token.Symbol
+	engine.newSwapPairSignal <- ethcom.HexToAddress(swapPair.BSCTokenContractAddr)
 	return nil
 }
 
-func (swapper *Swapper) ResetTokenInstance(token *model.Token) error {
-	swapper.Mutex.Lock()
-	defer swapper.Mutex.Unlock()
+func (engine *SwapEngine) GetSwapPairInstance(bscTokenAddr ethcom.Address) *SwapPairIns {
+	engine.mutex.RLock()
+	defer engine.mutex.RUnlock()
 
-	tokenInstance, ok := swapper.TokenInstances[token.Symbol]
-	if !ok {
-		return fmt.Errorf("token %s instance doesn't exist", token.Symbol)
-	}
-	tokenInstance.ETHTokenBalanceLowerThresholdSignal <- false
-	tokenInstance.BSCTokenBalanceLowerThresholdSignal <- false
-
-	toUpdate := map[string]interface{}{
-		"is_eth_balance_lower_than_threshold": false,
-		"is_bsc_balance_lower_than_threshold": false,
-	}
-	err := swapper.DB.Model(model.Token{}).Where("symbol = ?", tokenInstance.Symbol).Updates(toUpdate).Error
-	if err != nil {
-		util.Logger.Errorf("update token error, err=%s", err.Error())
-	}
-
-	return nil
-}
-
-func (swapper *Swapper) GetTokenInstance(symbol string) *TokenInstance {
-	swapper.Mutex.RLock()
-	defer swapper.Mutex.RUnlock()
-
-	tokenInstance, ok := swapper.TokenInstances[symbol]
+	tokenInstance, ok := engine.swapPairs[bscTokenAddr]
 	if !ok {
 		return nil
 	}
 	return tokenInstance
 }
 
-func (swapper *Swapper) UpdateTokenInstance(token *model.Token) {
-	swapper.Mutex.Lock()
-	defer swapper.Mutex.Unlock()
+func (engine *SwapEngine) UpdateSwapInstance(swapPair *model.SwapPair) {
+	engine.mutex.Lock()
+	defer engine.mutex.Unlock()
 
-	tokenInstance, ok := swapper.TokenInstances[token.Symbol]
+	bscTokenAddr := ethcom.HexToAddress(swapPair.BSCTokenContractAddr)
+	tokenInstance, ok := engine.swapPairs[bscTokenAddr]
 	if !ok {
 		return
 	}
 
 	upperBound := big.NewInt(0)
-	_, ok = upperBound.SetString(token.UpperBound, 10)
+	_, ok = upperBound.SetString(swapPair.UpperBound, 10)
 	tokenInstance.UpperBound = upperBound
 
 	lowBound := big.NewInt(0)
-	_, ok = upperBound.SetString(token.LowBound, 10)
+	_, ok = upperBound.SetString(swapPair.LowBound, 10)
 	tokenInstance.LowBound = lowBound
 
-	swapper.TokenInstances[token.Symbol] = tokenInstance
-}
-
-func (swapper *Swapper) RemoveTokenInstance(token *model.Token) {
-	swapper.Mutex.Lock()
-	defer swapper.Mutex.Unlock()
-
-	tokenInstance, ok := swapper.TokenInstances[token.Symbol]
-	if !ok {
-		util.Logger.Errorf("unsupported token %s", token.Symbol)
-		return
-	}
-	close(tokenInstance.CloseSignal)
-	close(tokenInstance.ETHTokenBalanceLowerThresholdSignal)
-	close(tokenInstance.BSCTokenBalanceLowerThresholdSignal)
-
-	delete(swapper.TokenInstances, token.Symbol)
-	delete(swapper.BSCContractAddrToSymbol, strings.ToLower(token.BSCTokenContractAddr))
-	delete(swapper.ETHContractAddrToSymbol, strings.ToLower(token.ETHTokenContractAddr))
+	engine.swapPairs[bscTokenAddr] = tokenInstance
 }

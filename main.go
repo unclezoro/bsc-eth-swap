@@ -13,7 +13,6 @@ import (
 	"github.com/spf13/pflag"
 	"github.com/spf13/viper"
 
-	"github.com/binance-chain/bsc-eth-swap/common"
 	"github.com/binance-chain/bsc-eth-swap/executor"
 	"github.com/binance-chain/bsc-eth-swap/model"
 	"github.com/binance-chain/bsc-eth-swap/observer"
@@ -116,26 +115,32 @@ func main() {
 		panic("new eth client error")
 	}
 
-	bscExecutor := executor.NewExecutor(common.ChainBSC, bscClient, config.ChainConfig.BSCSwapContractAddr, config)
+	bscExecutor := executor.NewBSCExecutor(bscClient, config.ChainConfig.BSCSwapAgentAddr, config)
 	bscObserver := observer.NewObserver(db, config.ChainConfig.BSCStartHeight, config.ChainConfig.BSCConfirmNum, config, bscExecutor)
 	bscObserver.Start()
 
-	ethExecutor := executor.NewExecutor(common.ChainETH, ethClient, config.ChainConfig.ETHSwapContractAddr, config)
+	ethExecutor := executor.NewEthExecutor(ethClient, config.ChainConfig.ETHSwapAgentAddr, config)
 	ethObserver := observer.NewObserver(db, config.ChainConfig.ETHStartHeight, config.ChainConfig.ETHConfirmNum, config, ethExecutor)
 	ethObserver.Start()
 
-	swapInstance, err := swap.NewSwapper(db, config, bscClient, ethClient)
+	swapEngine, err := swap.NewSwapEngine(db, config, bscClient, ethClient)
 	if err != nil {
-		panic(fmt.Sprintf("create swap service error, err=%s", err.Error()))
+		panic(fmt.Sprintf("create swap engine error, err=%s", err.Error()))
 	}
 
-	swapInstance.Start()
+	swapEngine.Start()
+
+	swapPairEngine, err := swap.NewSwapPairEngine(db, config, bscClient, swapEngine)
+	if err != nil {
+		panic(fmt.Sprintf("create swap pair engine error, err=%s", err.Error()))
+	}
+	swapPairEngine.Start()
 
 	signer, err := util.NewHmacSignerFromConfig(config)
 	if err != nil {
 		panic(fmt.Sprintf("new hmac singer error, err=%s", err.Error()))
 	}
-	admin := admin.NewAdmin(config, db, signer, swapInstance, bscExecutor, ethExecutor)
+	admin := admin.NewAdmin(config, db, signer, swapEngine)
 	go admin.Serve()
 
 	select {}

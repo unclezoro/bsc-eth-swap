@@ -35,14 +35,14 @@ func TestSwap_SwapInstanceCheck(t *testing.T) {
 	swapInstance, err := prepareTest(db, bscClient, ethClient, config)
 	require.NoError(t, err)
 
-	require.Equal(t, 2, len(swapInstance.TokenInstances))
+	require.Equal(t, 2, len(swapInstance.SwapPairs))
 
-	tokens := make([]model.Token, 0)
+	tokens := make([]model.SwapPair, 0)
 	db.Find(&tokens)
 
 	for _, token := range tokens {
-		require.Equal(t, token.Symbol, swapInstance.BSCContractAddrToSymbol[strings.ToLower(token.BSCTokenContractAddr)])
-		require.Equal(t, token.Symbol, swapInstance.ETHContractAddrToSymbol[strings.ToLower(token.ETHTokenContractAddr)])
+		require.Equal(t, token.Symbol, swapInstance.BscToEthContractAddr[strings.ToLower(token.BSCTokenContractAddr)])
+		require.Equal(t, token.Symbol, swapInstance.ETHToBscContractAddr[strings.ToLower(token.ETHTokenContractAddr)])
 	}
 }
 
@@ -67,7 +67,7 @@ func TestSwap_ETH2BSC(t *testing.T) {
 	_, clientAccount, err := getClientAccount()
 	require.NoError(t, err)
 
-	txEventLog := model.TxEventLog{
+	txEventLog := model.SwapStartTxLog{
 		Chain: common.ChainETH,
 
 		ContractAddress: "0x055d208b90DA0E3A431CA7E0fba326888Ef8a822",
@@ -82,7 +82,7 @@ func TestSwap_ETH2BSC(t *testing.T) {
 		Height:       0,
 		ConfirmedNum: 0,
 
-		Phase: model.SeenSwapRequest,
+		Phase: model.SeenRequest,
 
 		UpdateTime: time.Now().Unix(),
 		CreateTime: time.Now().Unix(),
@@ -94,18 +94,18 @@ func TestSwap_ETH2BSC(t *testing.T) {
 	time.Sleep(SleepTime * time.Second)
 	time.Sleep(1 * time.Second)
 
-	txEventLogs := make([]model.TxEventLog, 0)
+	txEventLogs := make([]model.SwapStartTxLog, 0)
 	db.Order("id desc").Find(&txEventLogs)
 	require.Equal(t, 1, len(txEventLogs))
-	require.Equal(t, model.ConfirmSwapRequest, txEventLogs[0].Phase)
+	require.Equal(t, model.ConfirmRequest, txEventLogs[0].Phase)
 
 	swaps := make([]model.Swap, 0)
 	db.Order("id desc").Find(&swaps)
 	require.Equal(t, 1, len(swaps))
-	require.Equal(t, txEventLog.TxHash, swaps[0].DepositTxHash)
+	require.Equal(t, txEventLog.TxHash, swaps[0].StartTxHash)
 	require.Equal(t, SwapQuoteRejected, swaps[0].Status)
 
-	txEventLog = model.TxEventLog{
+	txEventLog = model.SwapStartTxLog{
 		Chain: common.ChainETH,
 
 		ContractAddress: "0x055d208b90DA0E3A431CA7E0fba326888Ef8a822",
@@ -120,7 +120,7 @@ func TestSwap_ETH2BSC(t *testing.T) {
 		Height:       0,
 		ConfirmedNum: 0,
 
-		Phase: model.SeenSwapRequest,
+		Phase: model.SeenRequest,
 
 		UpdateTime: time.Now().Unix(),
 		CreateTime: time.Now().Unix(),
@@ -130,18 +130,18 @@ func TestSwap_ETH2BSC(t *testing.T) {
 
 	time.Sleep((SleepTime + 1) * time.Second)
 
-	txEventLogs = make([]model.TxEventLog, 0)
+	txEventLogs = make([]model.SwapStartTxLog, 0)
 	db.Order("id desc").Find(&txEventLogs)
 	require.Equal(t, 2, len(txEventLogs))
-	require.Equal(t, model.ConfirmSwapRequest, txEventLogs[0].Phase)
+	require.Equal(t, model.ConfirmRequest, txEventLogs[0].Phase)
 
 	swaps = make([]model.Swap, 0)
 	db.Order("id desc").Find(&swaps)
 	require.Equal(t, 2, len(swaps))
-	require.Equal(t, txEventLog.TxHash, swaps[0].DepositTxHash)
+	require.Equal(t, txEventLog.TxHash, swaps[0].StartTxHash)
 	require.Equal(t, SwapTokenReceived, swaps[0].Status)
 
-	err = db.Model(model.TxEventLog{}).Where("tx_hash = ?", txEventLog.TxHash).Updates(
+	err = db.Model(model.SwapStartTxLog{}).Where("tx_hash = ?", txEventLog.TxHash).Updates(
 		map[string]interface{}{
 			"status":      model.TxStatusConfirmed,
 			"update_time": time.Now().Unix(),
@@ -151,18 +151,18 @@ func TestSwap_ETH2BSC(t *testing.T) {
 	time.Sleep(SleepTime * time.Second)
 	time.Sleep(1 * time.Second)
 
-	txEventLogs = make([]model.TxEventLog, 0)
+	txEventLogs = make([]model.SwapStartTxLog, 0)
 	db.Order("id desc").Find(&txEventLogs)
 	require.Equal(t, 2, len(txEventLogs))
-	require.Equal(t, model.AckSwapRequest, txEventLogs[0].Phase)
+	require.Equal(t, model.AckRequest, txEventLogs[0].Phase)
 
 	time.Sleep((SwapSleepSecond + 1) * time.Second)
 
-	swapTxs := make([]model.SwapTx, 0)
+	swapTxs := make([]model.SwapFillTx, 0)
 	db.Order("id desc").Find(&swapTxs)
 	require.Equal(t, 1, len(swapTxs))
-	require.Equal(t, model.WithdrawTxSent, swapTxs[0].Status)
-	depositTxHash := swapTxs[0].DepositTxHash
+	require.Equal(t, model.FillTxSent, swapTxs[0].Status)
+	depositTxHash := swapTxs[0].StartSwapTxHash
 
 	swap := model.Swap{}
 	db.Where("deposit_tx_hash = ?", depositTxHash).First(&swap)
@@ -171,12 +171,12 @@ func TestSwap_ETH2BSC(t *testing.T) {
 	t.Log("wait to withdraw tx finalization")
 	time.Sleep(15 * time.Second)
 
-	swapTx := model.SwapTx{}
+	swapTx := model.SwapFillTx{}
 	swap = model.Swap{}
 	db.Where("deposit_tx_hash = ?", depositTxHash).First(&swap)
 	db.Where("deposit_tx_hash = ?", depositTxHash).First(&swapTx)
 	require.Equal(t, SwapSuccess, swap.Status)
-	require.Equal(t, model.WithdrawTxSuccess, swapTx.Status)
+	require.Equal(t, model.FillTxSuccess, swapTx.Status)
 }
 
 func TestSwap_BSC2ETH(t *testing.T) {
@@ -200,7 +200,7 @@ func TestSwap_BSC2ETH(t *testing.T) {
 	_, clientAccount, err := getClientAccount()
 	require.NoError(t, err)
 
-	txEventLog := model.TxEventLog{
+	txEventLog := model.SwapStartTxLog{
 		Chain: common.ChainBSC,
 
 		ContractAddress: "0xCCE0532FE1029f1A6B7ccca4C522cF9870a6a8Ed",
@@ -215,7 +215,7 @@ func TestSwap_BSC2ETH(t *testing.T) {
 		Height:       0,
 		ConfirmedNum: 0,
 
-		Phase: model.SeenSwapRequest,
+		Phase: model.SeenRequest,
 
 		UpdateTime: time.Now().Unix(),
 		CreateTime: time.Now().Unix(),
@@ -227,18 +227,18 @@ func TestSwap_BSC2ETH(t *testing.T) {
 	time.Sleep(SleepTime * time.Second)
 	time.Sleep(1 * time.Second)
 
-	txEventLogs := make([]model.TxEventLog, 0)
+	txEventLogs := make([]model.SwapStartTxLog, 0)
 	db.Order("id desc").Find(&txEventLogs)
 	require.Equal(t, 1, len(txEventLogs))
-	require.Equal(t, model.ConfirmSwapRequest, txEventLogs[0].Phase)
+	require.Equal(t, model.ConfirmRequest, txEventLogs[0].Phase)
 
 	swaps := make([]model.Swap, 0)
 	db.Order("id desc").Find(&swaps)
 	require.Equal(t, 1, len(swaps))
-	require.Equal(t, txEventLog.TxHash, swaps[0].DepositTxHash)
+	require.Equal(t, txEventLog.TxHash, swaps[0].StartTxHash)
 	require.Equal(t, SwapQuoteRejected, swaps[0].Status)
 
-	txEventLog = model.TxEventLog{
+	txEventLog = model.SwapStartTxLog{
 		Chain: common.ChainBSC,
 
 		ContractAddress: "0xCCE0532FE1029f1A6B7ccca4C522cF9870a6a8Ed",
@@ -253,7 +253,7 @@ func TestSwap_BSC2ETH(t *testing.T) {
 		Height:       0,
 		ConfirmedNum: 0,
 
-		Phase: model.SeenSwapRequest,
+		Phase: model.SeenRequest,
 
 		UpdateTime: time.Now().Unix(),
 		CreateTime: time.Now().Unix(),
@@ -264,7 +264,7 @@ func TestSwap_BSC2ETH(t *testing.T) {
 
 	time.Sleep((SleepTime + 1) * time.Second)
 
-	err = db.Model(model.TxEventLog{}).Where("tx_hash = ?", depositTxHash).Updates(
+	err = db.Model(model.SwapStartTxLog{}).Where("tx_hash = ?", depositTxHash).Updates(
 		map[string]interface{}{
 			"status":      model.TxStatusConfirmed,
 			"update_time": time.Now().Unix(),
@@ -273,10 +273,10 @@ func TestSwap_BSC2ETH(t *testing.T) {
 
 	time.Sleep((SleepTime + 1) * time.Second)
 
-	txEventLog = model.TxEventLog{}
+	txEventLog = model.SwapStartTxLog{}
 	err = db.Where("tx_hash = ?", depositTxHash).First(&txEventLog).Error
 	require.NoError(t, err)
-	require.Equal(t, model.AckSwapRequest, txEventLog.Phase)
+	require.Equal(t, model.AckRequest, txEventLog.Phase)
 
 	time.Sleep(SwapSleepSecond * 3 * time.Second)
 
@@ -285,20 +285,20 @@ func TestSwap_BSC2ETH(t *testing.T) {
 	require.NoError(t, err)
 	require.Equal(t, SwapSent, swap.Status)
 
-	swapTx := model.SwapTx{}
-	err = db.Model(model.SwapTx{}).Where("deposit_tx_hash = ?", depositTxHash).First(&swapTx).Error
+	swapTx := model.SwapFillTx{}
+	err = db.Model(model.SwapFillTx{}).Where("deposit_tx_hash = ?", depositTxHash).First(&swapTx).Error
 	require.NoError(t, err)
-	require.Equal(t, model.WithdrawTxSent, swapTx.Status)
+	require.Equal(t, model.FillTxSent, swapTx.Status)
 
 	t.Log("wait to withdraw tx finalization")
 	time.Sleep(60 * time.Second)
 
-	swapTx = model.SwapTx{}
+	swapTx = model.SwapFillTx{}
 	swap = model.Swap{}
 	db.Where("deposit_tx_hash = ?", depositTxHash).First(&swap)
 	db.Where("deposit_tx_hash = ?", depositTxHash).First(&swapTx)
 	require.Equal(t, SwapSuccess, swap.Status)
-	require.Equal(t, model.WithdrawTxSuccess, swapTx.Status)
+	require.Equal(t, model.FillTxSuccess, swapTx.Status)
 }
 
 func TestSwap_UnsupportedToken(t *testing.T) {
@@ -322,7 +322,7 @@ func TestSwap_UnsupportedToken(t *testing.T) {
 	_, clientAccount, err := getClientAccount()
 	require.NoError(t, err)
 
-	txEventLog := model.TxEventLog{
+	txEventLog := model.SwapStartTxLog{
 		Chain: common.ChainBSC,
 
 		ContractAddress: "0x8f36F4A709409a95a0df90cbc43ED9a658E11E4A", // DEF token
@@ -337,7 +337,7 @@ func TestSwap_UnsupportedToken(t *testing.T) {
 		Height:       0,
 		ConfirmedNum: 0,
 
-		Phase: model.SeenSwapRequest,
+		Phase: model.SeenRequest,
 
 		UpdateTime: time.Now().Unix(),
 		CreateTime: time.Now().Unix(),
@@ -348,7 +348,7 @@ func TestSwap_UnsupportedToken(t *testing.T) {
 
 	time.Sleep((SleepTime + 1) * time.Second)
 
-	err = db.Model(model.TxEventLog{}).Where("tx_hash = ?", depositTxHash).Updates(
+	err = db.Model(model.SwapStartTxLog{}).Where("tx_hash = ?", depositTxHash).Updates(
 		map[string]interface{}{
 			"status":      model.TxStatusConfirmed,
 			"update_time": time.Now().Unix(),
@@ -357,10 +357,10 @@ func TestSwap_UnsupportedToken(t *testing.T) {
 
 	time.Sleep((SleepTime + 1) * time.Second)
 
-	txEventLog = model.TxEventLog{}
+	txEventLog = model.SwapStartTxLog{}
 	err = db.Where("tx_hash = ?", depositTxHash).First(&txEventLog).Error
 	require.NoError(t, err)
-	require.Equal(t, model.AckSwapRequest, txEventLog.Phase)
+	require.Equal(t, model.AckRequest, txEventLog.Phase)
 
 	time.Sleep(SwapSleepSecond * 3 * time.Second)
 

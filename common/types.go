@@ -20,6 +20,7 @@ const (
 )
 
 type SwapStatus string
+type SwapPairStatus string
 type SwapDirection string
 
 type BlockAndEventLogs struct {
