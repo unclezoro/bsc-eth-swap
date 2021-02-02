@@ -64,7 +64,9 @@ type Swap struct {
 	// the user addreess who start this swap
 	Sponsor string `gorm:"not null;index:sponsor"`
 
-	BscContractAddr string               `gorm:"not null;index:swap_bsc_contract_addr"`
+	BscContractAddr string `gorm:"not null;index:swap_bsc_contract_addr"`
+	EThContractAddr string `gorm:"not null;index:swap_eth_contract_addr"`
+	Symbol          string
 	Amount          string               `gorm:"not null;index:swap_amount"`
 	Decimals        int                  `gorm:"not null"`
 	Direction       common.SwapDirection `gorm:"not null"`

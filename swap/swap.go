@@ -18,7 +18,6 @@ import (
 	"github.com/ethereum/go-ethereum/core/types"
 	"github.com/ethereum/go-ethereum/ethclient"
 
-
 	sabi "github.com/binance-chain/bsc-eth-swap/abi"
 	"github.com/binance-chain/bsc-eth-swap/common"
 	"github.com/binance-chain/bsc-eth-swap/model"
@@ -72,19 +71,19 @@ func NewSwapEngine(db *gorm.DB, cfg *util.Config, bscClient, ethClient *ethclien
 		hmacCKey:              keyConfig.HMACKey,
 		tssClientSecureConfig: NewClientSecureConfig(keyConfig),
 		bscClient:             bscClient,
-		ethClient:            ethClient,
-		bscChainID:           bscChainID.Int64(),
-		ethChainID:           ethChainID.Int64(),
-		bscTxSender:          ethcom.HexToAddress(cfg.KeyManagerConfig.BSCAccountAddr),
-		ethTxSender:          ethcom.HexToAddress(cfg.KeyManagerConfig.ETHAccountAddr),
-		swapPairs:            swapPairInstances,
-		bscToEthContractAddr: bscContractAddrToEthContractAddr,
-		ethToBscContractAddr: ethContractAddrToBscContractAddr,
-		newSwapPairSignal:    make(chan ethcom.Address),
-		ethSwapAgentAbi:      &ethSwapAgentAbi,
-		bscSwapAgentABi:      &bscSwapAgentAbi,
-		ethSwapAgent:         ethcom.HexToAddress(cfg.ChainConfig.ETHSwapAgentAddr),
-		bscSwapAgent:         ethcom.HexToAddress(cfg.ChainConfig.BSCSwapAgentAddr),
+		ethClient:             ethClient,
+		bscChainID:            bscChainID.Int64(),
+		ethChainID:            ethChainID.Int64(),
+		bscTxSender:           ethcom.HexToAddress(cfg.KeyManagerConfig.BSCAccountAddr),
+		ethTxSender:           ethcom.HexToAddress(cfg.KeyManagerConfig.ETHAccountAddr),
+		swapPairs:             swapPairInstances,
+		bscToEthContractAddr:  bscContractAddrToEthContractAddr,
+		ethToBscContractAddr:  ethContractAddrToBscContractAddr,
+		newSwapPairSignal:     make(chan ethcom.Address),
+		ethSwapAgentAbi:       &ethSwapAgentAbi,
+		bscSwapAgentABi:       &bscSwapAgentAbi,
+		ethSwapAgent:          ethcom.HexToAddress(cfg.ChainConfig.ETHSwapAgentAddr),
+		bscSwapAgent:          ethcom.HexToAddress(cfg.ChainConfig.BSCSwapAgentAddr),
 	}
 
 	return swapEngine, nil
@@ -135,8 +134,8 @@ func (engine *SwapEngine) monitorSwapRequestDaemon() {
 }
 
 func (engine *SwapEngine) getSwapHMAC(swap *model.Swap) string {
-	material := fmt.Sprintf("%s#%s#%s#%s#%d#%s#%s#%s#%s",
-		swap.Status, swap.Sponsor, swap.BscContractAddr, swap.Amount, swap.Decimals, swap.Direction, swap.StartTxHash, swap.FillTxHash, swap.RefundTxHash)
+	material := fmt.Sprintf("%s#%s#%s#%s#%s#%s#%d#%s#%s#%s#%s",
+		swap.Status, swap.Sponsor, swap.BscContractAddr, swap.EThContractAddr, swap.Symbol, swap.Amount, swap.Decimals, swap.Direction, swap.StartTxHash, swap.FillTxHash, swap.RefundTxHash)
 	mac := hmac.New(sha256.New, []byte(engine.hmacCKey))
 	mac.Write([]byte(material))
 
@@ -164,14 +163,22 @@ func (engine *SwapEngine) createSwap(txEventLog *model.SwapStartTxLog) *model.Sw
 		swapDirection = SwapBSC2Eth
 	}
 
-	bscContractAddr := ethcom.HexToAddress(txEventLog.ContractAddress)
+	var bscContractAddr ethcom.Address
+	var ethContractAddr ethcom.Address
 	var ok bool
 	decimals := 0
+	var symbol string
 	swapStatus := SwapQuoteRejected
 	err := func() error {
 		if txEventLog.Chain == common.ChainETH {
+			ethContractAddr = ethcom.HexToAddress(txEventLog.ContractAddress)
 			if bscContractAddr, ok = engine.ethToBscContractAddr[ethcom.HexToAddress(txEventLog.ContractAddress)]; !ok {
 				return fmt.Errorf("unsupported eth token contract address: %s", txEventLog.ContractAddress)
+			}
+		} else {
+			bscContractAddr = ethcom.HexToAddress(txEventLog.ContractAddress)
+			if ethContractAddr, ok = engine.ethToBscContractAddr[ethcom.HexToAddress(txEventLog.ContractAddress)]; !ok {
+				return fmt.Errorf("unsupported bsc token contract address: %s", txEventLog.ContractAddress)
 			}
 		}
 		pairInstance, ok := engine.swapPairs[bscContractAddr]
@@ -179,6 +186,7 @@ func (engine *SwapEngine) createSwap(txEventLog *model.SwapStartTxLog) *model.Sw
 			return fmt.Errorf("unsupported swap pair %s", bscContractAddr.String())
 		}
 		decimals = pairInstance.Decimals
+		symbol = pairInstance.Symbol
 		swapAmount := big.NewInt(0)
 		_, ok = swapAmount.SetString(txEventLog.Amount, 10)
 		if !ok {
@@ -201,6 +209,8 @@ func (engine *SwapEngine) createSwap(txEventLog *model.SwapStartTxLog) *model.Sw
 		Status:          swapStatus,
 		Sponsor:         sponsor,
 		BscContractAddr: bscContractAddr.String(),
+		EThContractAddr: ethContractAddr.String(),
+		Symbol:          symbol,
 		Amount:          amount,
 		Decimals:        decimals,
 		Direction:       swapDirection,
