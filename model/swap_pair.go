@@ -8,6 +8,7 @@ import (
 
 type SwapPair struct {
 	gorm.Model
+	Sponsor              string `gorm:"not null"`
 	Symbol               string `gorm:"not null;index:symbol"`
 	Name                 string `gorm:"not null"`
 	Decimals             int    `gorm:"not null"`
@@ -29,6 +30,7 @@ type SwapPairRegisterTxLog struct {
 	Id    int64
 	Chain string `gorm:"not null;index:swappair_register_tx_log_chain"`
 
+	Sponsor              string `gorm:"not null"`
 	ETHTokenContractAddr string `gorm:"unique;not null"`
 	Symbol               string `gorm:"not null;index:swappair_register_tx_log_symbol"`
 	Name                 string `gorm:"not null"`
@@ -88,6 +90,7 @@ type SwapPairStateMachine struct {
 	ETHTokenContractAddr string `gorm:"unique;not null"`
 	BSCTokenContractAddr string
 
+	Sponsor  string `gorm:"not null"`
 	Symbol   string `gorm:"not null;index:swap_pair_sm_symbol"`
 	Name     string `gorm:"not null"`
 	Decimals int    `gorm:"not null"`

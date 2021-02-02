@@ -28,7 +28,7 @@ var (
 )
 
 // ETHSwapAgentABI is the input ABI used to generate the binding from.
-const ETHSwapAgentABI = "[{\"inputs\":[],\"stateMutability\":\"nonpayable\",\"type\":\"constructor\"},{\"anonymous\":false,\"inputs\":[{\"indexed\":true,\"internalType\":\"address\",\"name\":\"previousOwner\",\"type\":\"address\"},{\"indexed\":true,\"internalType\":\"address\",\"name\":\"newOwner\",\"type\":\"address\"}],\"name\":\"OwnershipTransferred\",\"type\":\"event\"},{\"anonymous\":false,\"inputs\":[{\"indexed\":true,\"internalType\":\"address\",\"name\":\"erc20Addr\",\"type\":\"address\"},{\"indexed\":true,\"internalType\":\"bytes32\",\"name\":\"bscTxHash\",\"type\":\"bytes32\"},{\"indexed\":true,\"internalType\":\"address\",\"name\":\"toAddress\",\"type\":\"address\"},{\"indexed\":false,\"internalType\":\"uint256\",\"name\":\"amount\",\"type\":\"uint256\"}],\"name\":\"SwapFilled\",\"type\":\"event\"},{\"anonymous\":false,\"inputs\":[{\"indexed\":true,\"internalType\":\"address\",\"name\":\"erc20Addr\",\"type\":\"address\"},{\"indexed\":false,\"internalType\":\"string\",\"name\":\"name\",\"type\":\"string\"},{\"indexed\":false,\"internalType\":\"string\",\"name\":\"symbol\",\"type\":\"string\"},{\"indexed\":false,\"internalType\":\"uint8\",\"name\":\"decimals\",\"type\":\"uint8\"}],\"name\":\"SwapPairRegister\",\"type\":\"event\"},{\"anonymous\":false,\"inputs\":[{\"indexed\":true,\"internalType\":\"address\",\"name\":\"erc20Addr\",\"type\":\"address\"},{\"indexed\":true,\"internalType\":\"address\",\"name\":\"fromAddr\",\"type\":\"address\"},{\"indexed\":false,\"internalType\":\"uint256\",\"name\":\"amount\",\"type\":\"uint256\"},{\"indexed\":false,\"internalType\":\"uint256\",\"name\":\"feeAmount\",\"type\":\"uint256\"}],\"name\":\"SwapStarted\",\"type\":\"event\"},{\"inputs\":[{\"internalType\":\"bytes32\",\"name\":\"bscTxHash\",\"type\":\"bytes32\"},{\"internalType\":\"address\",\"name\":\"erc20Addr\",\"type\":\"address\"},{\"internalType\":\"address\",\"name\":\"toAddress\",\"type\":\"address\"},{\"internalType\":\"uint256\",\"name\":\"amount\",\"type\":\"uint256\"}],\"name\":\"fillBSC2ETHSwap\",\"outputs\":[{\"internalType\":\"bool\",\"name\":\"\",\"type\":\"bool\"}],\"stateMutability\":\"nonpayable\",\"type\":\"function\"},{\"inputs\":[{\"internalType\":\"uint256\",\"name\":\"fee\",\"type\":\"uint256\"},{\"internalType\":\"addresspayable\",\"name\":\"ownerAddr\",\"type\":\"address\"}],\"name\":\"initialize\",\"outputs\":[],\"stateMutability\":\"nonpayable\",\"type\":\"function\"},{\"inputs\":[],\"name\":\"owner\",\"outputs\":[{\"internalType\":\"addresspayable\",\"name\":\"\",\"type\":\"address\"}],\"stateMutability\":\"view\",\"type\":\"function\"},{\"inputs\":[{\"internalType\":\"address\",\"name\":\"erc20Addr\",\"type\":\"address\"}],\"name\":\"registerSwapToBSC\",\"outputs\":[{\"internalType\":\"bool\",\"name\":\"\",\"type\":\"bool\"}],\"stateMutability\":\"nonpayable\",\"type\":\"function\"},{\"inputs\":[{\"internalType\":\"address\",\"name\":\"\",\"type\":\"address\"}],\"name\":\"registeredERC20\",\"outputs\":[{\"internalType\":\"bool\",\"name\":\"\",\"type\":\"bool\"}],\"stateMutability\":\"view\",\"type\":\"function\"},{\"inputs\":[],\"name\":\"renounceOwnership\",\"outputs\":[],\"stateMutability\":\"nonpayable\",\"type\":\"function\"},{\"inputs\":[{\"internalType\":\"uint256\",\"name\":\"fee\",\"type\":\"uint256\"}],\"name\":\"setSwapFee\",\"outputs\":[],\"stateMutability\":\"nonpayable\",\"type\":\"function\"},{\"inputs\":[{\"internalType\":\"address\",\"name\":\"erc20Addr\",\"type\":\"address\"},{\"internalType\":\"uint256\",\"name\":\"amount\",\"type\":\"uint256\"}],\"name\":\"swapETH2BSC\",\"outputs\":[{\"internalType\":\"bool\",\"name\":\"\",\"type\":\"bool\"}],\"stateMutability\":\"payable\",\"type\":\"function\"},{\"inputs\":[],\"name\":\"swapFee\",\"outputs\":[{\"internalType\":\"uint256\",\"name\":\"\",\"type\":\"uint256\"}],\"stateMutability\":\"view\",\"type\":\"function\"},{\"inputs\":[{\"internalType\":\"addresspayable\",\"name\":\"newOwner\",\"type\":\"address\"}],\"name\":\"transferOwnership\",\"outputs\":[],\"stateMutability\":\"nonpayable\",\"type\":\"function\"}]"
+const ETHSwapAgentABI = "[{\"inputs\":[],\"stateMutability\":\"nonpayable\",\"type\":\"constructor\"},{\"anonymous\":false,\"inputs\":[{\"indexed\":true,\"internalType\":\"address\",\"name\":\"previousOwner\",\"type\":\"address\"},{\"indexed\":true,\"internalType\":\"address\",\"name\":\"newOwner\",\"type\":\"address\"}],\"name\":\"OwnershipTransferred\",\"type\":\"event\"},{\"anonymous\":false,\"inputs\":[{\"indexed\":true,\"internalType\":\"address\",\"name\":\"erc20Addr\",\"type\":\"address\"},{\"indexed\":true,\"internalType\":\"bytes32\",\"name\":\"bscTxHash\",\"type\":\"bytes32\"},{\"indexed\":true,\"internalType\":\"address\",\"name\":\"toAddress\",\"type\":\"address\"},{\"indexed\":false,\"internalType\":\"uint256\",\"name\":\"amount\",\"type\":\"uint256\"}],\"name\":\"SwapFilled\",\"type\":\"event\"},{\"anonymous\":false,\"inputs\":[{\"indexed\":true,\"internalType\":\"address\",\"name\":\"sponsor\",\"type\":\"address\"},{\"indexed\":true,\"internalType\":\"address\",\"name\":\"erc20Addr\",\"type\":\"address\"},{\"indexed\":false,\"internalType\":\"string\",\"name\":\"name\",\"type\":\"string\"},{\"indexed\":false,\"internalType\":\"string\",\"name\":\"symbol\",\"type\":\"string\"},{\"indexed\":false,\"internalType\":\"uint8\",\"name\":\"decimals\",\"type\":\"uint8\"}],\"name\":\"SwapPairRegister\",\"type\":\"event\"},{\"anonymous\":false,\"inputs\":[{\"indexed\":true,\"internalType\":\"address\",\"name\":\"erc20Addr\",\"type\":\"address\"},{\"indexed\":true,\"internalType\":\"address\",\"name\":\"fromAddr\",\"type\":\"address\"},{\"indexed\":false,\"internalType\":\"uint256\",\"name\":\"amount\",\"type\":\"uint256\"},{\"indexed\":false,\"internalType\":\"uint256\",\"name\":\"feeAmount\",\"type\":\"uint256\"}],\"name\":\"SwapStarted\",\"type\":\"event\"},{\"inputs\":[],\"name\":\"owner\",\"outputs\":[{\"internalType\":\"addresspayable\",\"name\":\"\",\"type\":\"address\"}],\"stateMutability\":\"view\",\"type\":\"function\"},{\"inputs\":[{\"internalType\":\"address\",\"name\":\"\",\"type\":\"address\"}],\"name\":\"registeredERC20\",\"outputs\":[{\"internalType\":\"bool\",\"name\":\"\",\"type\":\"bool\"}],\"stateMutability\":\"view\",\"type\":\"function\"},{\"inputs\":[],\"name\":\"swapFee\",\"outputs\":[{\"internalType\":\"uint256\",\"name\":\"\",\"type\":\"uint256\"}],\"stateMutability\":\"view\",\"type\":\"function\"},{\"inputs\":[{\"internalType\":\"uint256\",\"name\":\"fee\",\"type\":\"uint256\"},{\"internalType\":\"addresspayable\",\"name\":\"ownerAddr\",\"type\":\"address\"}],\"name\":\"initialize\",\"outputs\":[],\"stateMutability\":\"nonpayable\",\"type\":\"function\"},{\"inputs\":[],\"name\":\"renounceOwnership\",\"outputs\":[],\"stateMutability\":\"nonpayable\",\"type\":\"function\"},{\"inputs\":[{\"internalType\":\"addresspayable\",\"name\":\"newOwner\",\"type\":\"address\"}],\"name\":\"transferOwnership\",\"outputs\":[],\"stateMutability\":\"nonpayable\",\"type\":\"function\"},{\"inputs\":[{\"internalType\":\"uint256\",\"name\":\"fee\",\"type\":\"uint256\"}],\"name\":\"setSwapFee\",\"outputs\":[],\"stateMutability\":\"nonpayable\",\"type\":\"function\"},{\"inputs\":[{\"internalType\":\"address\",\"name\":\"erc20Addr\",\"type\":\"address\"}],\"name\":\"registerSwapToBSC\",\"outputs\":[{\"internalType\":\"bool\",\"name\":\"\",\"type\":\"bool\"}],\"stateMutability\":\"nonpayable\",\"type\":\"function\"},{\"inputs\":[{\"internalType\":\"bytes32\",\"name\":\"bscTxHash\",\"type\":\"bytes32\"},{\"internalType\":\"address\",\"name\":\"erc20Addr\",\"type\":\"address\"},{\"internalType\":\"address\",\"name\":\"toAddress\",\"type\":\"address\"},{\"internalType\":\"uint256\",\"name\":\"amount\",\"type\":\"uint256\"}],\"name\":\"fillBSC2ETHSwap\",\"outputs\":[{\"internalType\":\"bool\",\"name\":\"\",\"type\":\"bool\"}],\"stateMutability\":\"nonpayable\",\"type\":\"function\"},{\"inputs\":[{\"internalType\":\"address\",\"name\":\"erc20Addr\",\"type\":\"address\"},{\"internalType\":\"uint256\",\"name\":\"amount\",\"type\":\"uint256\"}],\"name\":\"swapETH2BSC\",\"outputs\":[{\"internalType\":\"bool\",\"name\":\"\",\"type\":\"bool\"}],\"stateMutability\":\"payable\",\"type\":\"function\"}],"
 
 // ETHSwapAgent is an auto generated Go binding around an Ethereum contract.
 type ETHSwapAgent struct {
@@ -780,6 +780,7 @@ func (it *ETHSwapAgentSwapPairRegisterIterator) Close() error {
 
 // ETHSwapAgentSwapPairRegister represents a SwapPairRegister event raised by the ETHSwapAgent contract.
 type ETHSwapAgentSwapPairRegister struct {
+	Sponsor   common.Address
 	Erc20Addr common.Address
 	Name      string
 	Symbol    string
@@ -787,34 +788,42 @@ type ETHSwapAgentSwapPairRegister struct {
 	Raw       types.Log // Blockchain specific contextual infos
 }
 
-// FilterSwapPairRegister is a free log retrieval operation binding the contract event 0x98e35d9503aa3d762787377225f8656cf8a9e27b3655990628f35a7765147255.
+// FilterSwapPairRegister is a free log retrieval operation binding the contract event 0xfe3bd005e346323fa452df8cafc28c55b99e3766ba8750571d139c6cf5bc08a0.
 //
-// Solidity: event SwapPairRegister(address indexed erc20Addr, string name, string symbol, uint8 decimals)
-func (_ETHSwapAgent *ETHSwapAgentFilterer) FilterSwapPairRegister(opts *bind.FilterOpts, erc20Addr []common.Address) (*ETHSwapAgentSwapPairRegisterIterator, error) {
+// Solidity: event SwapPairRegister(address indexed sponsor, address indexed erc20Addr, string name, string symbol, uint8 decimals)
+func (_ETHSwapAgent *ETHSwapAgentFilterer) FilterSwapPairRegister(opts *bind.FilterOpts, sponsor []common.Address, erc20Addr []common.Address) (*ETHSwapAgentSwapPairRegisterIterator, error) {
 
+	var sponsorRule []interface{}
+	for _, sponsorItem := range sponsor {
+		sponsorRule = append(sponsorRule, sponsorItem)
+	}
 	var erc20AddrRule []interface{}
 	for _, erc20AddrItem := range erc20Addr {
 		erc20AddrRule = append(erc20AddrRule, erc20AddrItem)
 	}
 
-	logs, sub, err := _ETHSwapAgent.contract.FilterLogs(opts, "SwapPairRegister", erc20AddrRule)
+	logs, sub, err := _ETHSwapAgent.contract.FilterLogs(opts, "SwapPairRegister", sponsorRule, erc20AddrRule)
 	if err != nil {
 		return nil, err
 	}
 	return &ETHSwapAgentSwapPairRegisterIterator{contract: _ETHSwapAgent.contract, event: "SwapPairRegister", logs: logs, sub: sub}, nil
 }
 
-// WatchSwapPairRegister is a free log subscription operation binding the contract event 0x98e35d9503aa3d762787377225f8656cf8a9e27b3655990628f35a7765147255.
+// WatchSwapPairRegister is a free log subscription operation binding the contract event 0xfe3bd005e346323fa452df8cafc28c55b99e3766ba8750571d139c6cf5bc08a0.
 //
-// Solidity: event SwapPairRegister(address indexed erc20Addr, string name, string symbol, uint8 decimals)
-func (_ETHSwapAgent *ETHSwapAgentFilterer) WatchSwapPairRegister(opts *bind.WatchOpts, sink chan<- *ETHSwapAgentSwapPairRegister, erc20Addr []common.Address) (event.Subscription, error) {
+// Solidity: event SwapPairRegister(address indexed sponsor, address indexed erc20Addr, string name, string symbol, uint8 decimals)
+func (_ETHSwapAgent *ETHSwapAgentFilterer) WatchSwapPairRegister(opts *bind.WatchOpts, sink chan<- *ETHSwapAgentSwapPairRegister, sponsor []common.Address, erc20Addr []common.Address) (event.Subscription, error) {
 
+	var sponsorRule []interface{}
+	for _, sponsorItem := range sponsor {
+		sponsorRule = append(sponsorRule, sponsorItem)
+	}
 	var erc20AddrRule []interface{}
 	for _, erc20AddrItem := range erc20Addr {
 		erc20AddrRule = append(erc20AddrRule, erc20AddrItem)
 	}
 
-	logs, sub, err := _ETHSwapAgent.contract.WatchLogs(opts, "SwapPairRegister", erc20AddrRule)
+	logs, sub, err := _ETHSwapAgent.contract.WatchLogs(opts, "SwapPairRegister", sponsorRule, erc20AddrRule)
 	if err != nil {
 		return nil, err
 	}
@@ -846,9 +855,9 @@ func (_ETHSwapAgent *ETHSwapAgentFilterer) WatchSwapPairRegister(opts *bind.Watc
 	}), nil
 }
 
-// ParseSwapPairRegister is a log parse operation binding the contract event 0x98e35d9503aa3d762787377225f8656cf8a9e27b3655990628f35a7765147255.
+// ParseSwapPairRegister is a log parse operation binding the contract event 0xfe3bd005e346323fa452df8cafc28c55b99e3766ba8750571d139c6cf5bc08a0.
 //
-// Solidity: event SwapPairRegister(address indexed erc20Addr, string name, string symbol, uint8 decimals)
+// Solidity: event SwapPairRegister(address indexed sponsor, address indexed erc20Addr, string name, string symbol, uint8 decimals)
 func (_ETHSwapAgent *ETHSwapAgentFilterer) ParseSwapPairRegister(log types.Log) (*ETHSwapAgentSwapPairRegister, error) {
 	event := new(ETHSwapAgentSwapPairRegister)
 	if err := _ETHSwapAgent.contract.UnpackLog(event, "SwapPairRegister", log); err != nil {

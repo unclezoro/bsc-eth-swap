@@ -109,10 +109,10 @@ func (engine *SwapPairEngine) createSwapPairSM(txEventLog *model.SwapPairRegiste
 		Status:               swapPairStatus,
 		ETHTokenContractAddr: ethContractAddr.String(),
 		BSCTokenContractAddr: "",
-
-		Symbol:   txEventLog.Symbol,
-		Name:     txEventLog.Name,
-		Decimals: txEventLog.Decimals,
+		Sponsor:              txEventLog.Sponsor,
+		Symbol:               txEventLog.Symbol,
+		Name:                 txEventLog.Name,
+		Decimals:             txEventLog.Decimals,
 
 		PairRegisterTxHash: swapPairRegisterTxHash,
 		PairCreatTxHash:    "",
@@ -544,6 +544,7 @@ func (engine *SwapPairEngine) trackSwapPairTxDaemon() {
 					continue
 				}
 				swapPair := model.SwapPair{
+					Sponsor:              swapPairSM.Sponsor,
 					Symbol:               swapPairSM.Symbol,
 					Name:                 swapPairSM.Name,
 					Decimals:             swapPairSM.Decimals,

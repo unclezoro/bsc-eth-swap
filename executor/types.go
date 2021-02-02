@@ -63,10 +63,11 @@ func ParseSwapStartEvent(abi *abi.ABI, log *types.Log) (*SwapStartedEvent, error
 // =================  SwapPairRegister ===================
 var (
 	SwapPairRegisterEventName = "SwapPairRegister"
-	SwapPairRegisterEventHash = ethcmm.HexToHash("0x98e35d9503aa3d762787377225f8656cf8a9e27b3655990628f35a7765147255")
+	SwapPairRegisterEventHash = ethcmm.HexToHash("0xfe3bd005e346323fa452df8cafc28c55b99e3766ba8750571d139c6cf5bc08a0")
 )
 
 type SwapPairRegisterEvent struct {
+	Sponsor      ethcmm.Address
 	ContractAddr ethcmm.Address
 	Name         string
 	Symbol       string
@@ -76,6 +77,7 @@ type SwapPairRegisterEvent struct {
 func (ev *SwapPairRegisterEvent) ToSwapPairRegisterLog(log *types.Log) *model.SwapPairRegisterTxLog {
 	pack := &model.SwapPairRegisterTxLog{
 		ETHTokenContractAddr: ev.ContractAddr.String(),
+		Sponsor:              ev.Sponsor.String(),
 		Symbol:               ev.Symbol,
 		Name:                 ev.Name,
 		Decimals:             int(ev.Decimals),
@@ -94,8 +96,8 @@ func ParseSwapPairRegisterEvent(abi *abi.ABI, log *types.Log) (*SwapPairRegister
 	if err != nil {
 		return nil, err
 	}
-
-	ev.ContractAddr = ethcmm.BytesToAddress(log.Topics[1].Bytes())
+	ev.Sponsor = ethcmm.BytesToAddress(log.Topics[1].Bytes())
+	ev.ContractAddr = ethcmm.BytesToAddress(log.Topics[2].Bytes())
 
 	return &ev, nil
 }
