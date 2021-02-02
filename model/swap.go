@@ -62,7 +62,7 @@ type Swap struct {
 
 	Status common.SwapStatus `gorm:"not null;index:swap_status"`
 	// the user addreess who start this swap
-	Sponsor string `gorm:"not null;index:sponsor"`
+	Sponsor string `gorm:"not null;index:swap_sponsor"`
 
 	BscContractAddr string `gorm:"not null;index:swap_bsc_contract_addr"`
 	EThContractAddr string `gorm:"not null;index:swap_eth_contract_addr"`

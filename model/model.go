@@ -45,5 +45,12 @@ func (l *BlockLog) BeforeCreate() (err error) {
 }
 
 func InitTables(db *gorm.DB) {
-	db.AutoMigrate(&SwapPair{}, &SwapFillTx{}, &Swap{}, &SwapStartTxLog{}, &BlockLog{})
+	db.AutoMigrate(&SwapPair{})
+	db.AutoMigrate(&SwapFillTx{})
+	db.AutoMigrate(&Swap{})
+	db.AutoMigrate(&SwapStartTxLog{})
+	db.AutoMigrate(&BlockLog{})
+	db.AutoMigrate(&SwapPairCreatTx{})
+	db.AutoMigrate(&SwapPairRegisterTxLog{})
+	db.AutoMigrate(&SwapPairStateMachine{})
 }

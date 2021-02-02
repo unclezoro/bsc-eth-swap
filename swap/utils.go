@@ -7,22 +7,23 @@ import (
 	"encoding/hex"
 	"encoding/json"
 	"fmt"
-	"github.com/ethereum/go-ethereum"
-	"github.com/ethereum/go-ethereum/core/types"
-	"github.com/ethereum/go-ethereum/ethclient"
-	"github.com/ethereum/go-ethereum/rlp"
 	"math/big"
 	"strconv"
 	"strings"
+
+	"github.com/ethereum/go-ethereum"
+	"github.com/ethereum/go-ethereum/accounts/abi"
+	ethcom "github.com/ethereum/go-ethereum/common"
+	"github.com/ethereum/go-ethereum/core/types"
+	"github.com/ethereum/go-ethereum/crypto"
+	"github.com/ethereum/go-ethereum/ethclient"
+	"github.com/ethereum/go-ethereum/rlp"
 
 	"github.com/binance-chain/tss-crypto-toolkit/ec"
 	rsaTool "github.com/binance-chain/tss-crypto-toolkit/rsa"
 	nt "github.com/binance-chain/tss-zerotrust-sdk/network"
 	tsssdksecure "github.com/binance-chain/tss-zerotrust-sdk/secure"
 	tsssdktypes "github.com/binance-chain/tss-zerotrust-sdk/types"
-	"github.com/ethereum/go-ethereum/accounts/abi"
-	ethcom "github.com/ethereum/go-ethereum/common"
-	"github.com/ethereum/go-ethereum/crypto"
 
 	"github.com/binance-chain/bsc-eth-swap/common"
 	"github.com/binance-chain/bsc-eth-swap/model"
@@ -248,13 +249,13 @@ func buildSignedTransaction(network string, txSender, contract ethcom.Address, e
 	var signedRawTx *tsssdktypes.SignResponse
 	if network == common.ChainBSC {
 		signedRawTx, err = signBSC(tssConfig, endpoint, txSender.String(),
-			"", "0", contract.String(), "", chainId.Int64(), int64(nonce), gasPrice.String(), strconv.Itoa(int(gasLimit)), txInput, true)
+			contract.String(), "0", "", "", chainId.Int64(), int64(nonce), "0x"+strconv.FormatInt(gasPrice.Int64(), 16), "0x"+strconv.FormatInt(int64(gasLimit), 16), txInput, true)
 		if err != nil {
 			return nil, fmt.Errorf("TSS server failure: %v", err)
 		}
 	} else {
 		signedRawTx, err = signETH(tssConfig, endpoint, txSender.String(),
-			"", "0", contract.String(), "", chainId.Int64(), int64(nonce), gasPrice.String(), strconv.Itoa(int(gasLimit)), txInput, true)
+			contract.String(), "0", "", "", chainId.Int64(), int64(nonce), "0x"+strconv.FormatInt(gasPrice.Int64(), 16), "0x"+strconv.FormatInt(int64(gasLimit), 16), txInput, true)
 		if err != nil {
 			return nil, fmt.Errorf("TSS server failure: %v", err)
 		}

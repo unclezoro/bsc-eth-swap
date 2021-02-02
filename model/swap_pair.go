@@ -1,14 +1,16 @@
 package model
 
 import (
-	"github.com/binance-chain/bsc-eth-swap/common"
-	"github.com/jinzhu/gorm"
 	"time"
+
+	"github.com/jinzhu/gorm"
+
+	"github.com/binance-chain/bsc-eth-swap/common"
 )
 
 type SwapPair struct {
 	gorm.Model
-	Sponsor              string `gorm:"not null"`
+	Sponsor              string `gorm:"not null;index:sponsor"`
 	Symbol               string `gorm:"not null;index:symbol"`
 	Name                 string `gorm:"not null"`
 	Decimals             int    `gorm:"not null"`
@@ -31,7 +33,7 @@ type SwapPairRegisterTxLog struct {
 	Chain string `gorm:"not null;index:swappair_register_tx_log_chain"`
 
 	Sponsor              string `gorm:"not null"`
-	ETHTokenContractAddr string `gorm:"unique;not null"`
+	ETHTokenContractAddr string `gorm:"not null"`
 	Symbol               string `gorm:"not null;index:swappair_register_tx_log_symbol"`
 	Name                 string `gorm:"not null"`
 	Decimals             int    `gorm:"not null"`
@@ -64,8 +66,8 @@ type SwapPairCreatTx struct {
 	SwapPairRegisterTxHash string `gorm:"unique;not null"`
 	SwapPairCreatTxHash    string `gorm:"unique;not null"`
 
-	ETHTokenContractAddr string `gorm:"unique;not null"`
-	BSCTokenContractAddr string `gorm:"unique;not null"`
+	ETHTokenContractAddr string `gorm:"not null"`
+	BSCTokenContractAddr string `gorm:"not null"`
 
 	Symbol   string `gorm:"not null;index:swap_pair_creat_tx_symbol"`
 	Name     string `gorm:"not null"`
@@ -87,7 +89,7 @@ type SwapPairStateMachine struct {
 
 	Status common.SwapPairStatus `gorm:"not null;index:swap_pair_sm_status"`
 
-	ETHTokenContractAddr string `gorm:"unique;not null"`
+	ETHTokenContractAddr string `gorm:"not null"`
 	BSCTokenContractAddr string
 
 	Sponsor  string `gorm:"not null"`
@@ -95,7 +97,7 @@ type SwapPairStateMachine struct {
 	Name     string `gorm:"not null"`
 	Decimals int    `gorm:"not null"`
 
-	PairRegisterTxHash string `gorm:"unique;not null"`
+	PairRegisterTxHash string `gorm:"not null"`
 	PairCreatTxHash    string
 
 	// used to log more message about how this swap_pair failed or invalid

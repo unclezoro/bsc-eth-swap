@@ -2,11 +2,10 @@ package executor
 
 import (
 	common "github.com/binance-chain/bsc-eth-swap/common"
-	ethcmm "github.com/ethereum/go-ethereum/common"
-	"math/big"
-
 	"github.com/ethereum/go-ethereum/accounts/abi"
+	ethcmm "github.com/ethereum/go-ethereum/common"
 	"github.com/ethereum/go-ethereum/core/types"
+	"math/big"
 
 	"github.com/binance-chain/bsc-eth-swap/model"
 )
