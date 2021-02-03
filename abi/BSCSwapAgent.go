@@ -30,7 +30,7 @@ var (
 // BSCSwapAgentABI is the input ABI used to generate the binding from.
 const BSCSwapAgentABI = "[{\"inputs\":[],\"stateMutability\":\"nonpayable\",\"type\":\"constructor\"},{\"anonymous\":false,\"inputs\":[{\"indexed\":true,\"internalType\":\"address\",\"name\":\"previousOwner\",\"type\":\"address\"},{\"indexed\":true,\"internalType\":\"address\",\"name\":\"newOwner\",\"type\":\"address\"}],\"name\":\"OwnershipTransferred\",\"type\":\"event\"},{\"anonymous\":false,\"inputs\":[{\"indexed\":true,\"internalType\":\"address\",\"name\":\"bep20Addr\",\"type\":\"address\"},{\"indexed\":true,\"internalType\":\"bytes32\",\"name\":\"ethTxHash\",\"type\":\"bytes32\"},{\"indexed\":true,\"internalType\":\"address\",\"name\":\"toAddress\",\"type\":\"address\"},{\"indexed\":false,\"internalType\":\"uint256\",\"name\":\"amount\",\"type\":\"uint256\"}],\"name\":\"SwapFilled\",\"type\":\"event\"},{\"anonymous\":false,\"inputs\":[{\"indexed\":true,\"internalType\":\"bytes32\",\"name\":\"ethRegisterTxHash\",\"type\":\"bytes32\"},{\"indexed\":true,\"internalType\":\"address\",\"name\":\"bep20Addr\",\"type\":\"address\"},{\"indexed\":true,\"internalType\":\"address\",\"name\":\"erc20Addr\",\"type\":\"address\"},{\"indexed\":false,\"internalType\":\"string\",\"name\":\"symbol\",\"type\":\"string\"},{\"indexed\":false,\"internalType\":\"string\",\"name\":\"name\",\"type\":\"string\"},{\"indexed\":false,\"internalType\":\"uint8\",\"name\":\"decimals\",\"type\":\"uint8\"}],\"name\":\"SwapPairCreated\",\"type\":\"event\"},{\"anonymous\":false,\"inputs\":[{\"indexed\":true,\"internalType\":\"address\",\"name\":\"bep20Addr\",\"type\":\"address\"},{\"indexed\":true,\"internalType\":\"address\",\"name\":\"erc20Addr\",\"type\":\"address\"},{\"indexed\":true,\"internalType\":\"address\",\"name\":\"fromAddr\",\"type\":\"address\"},{\"indexed\":false,\"internalType\":\"uint256\",\"name\":\"amount\",\"type\":\"uint256\"},{\"indexed\":false,\"internalType\":\"uint256\",\"name\":\"feeAmount\",\"type\":\"uint256\"}],\"name\":\"SwapStarted\",\"type\":\"event\"},{\"inputs\":[],\"name\":\"bep20Implementation\",\"outputs\":[{\"internalType\":\"address\",\"name\":\"\",\"type\":\"address\"}],\"stateMutability\":\"view\",\"type\":\"function\"},{\"inputs\":[],\"name\":\"bep20ProxyAdmin\",\"outputs\":[{\"internalType\":\"address\",\"name\":\"\",\"type\":\"address\"}],\"stateMutability\":\"view\",\"type\":\"function\"},{\"inputs\":[{\"internalType\":\"bytes32\",\"name\":\"ethTxHash\",\"type\":\"bytes32\"},{\"internalType\":\"address\",\"name\":\"erc20Addr\",\"type\":\"address\"},{\"internalType\":\"string\",\"name\":\"name\",\"type\":\"string\"},{\"internalType\":\"string\",\"name\":\"symbol\",\"type\":\"string\"},{\"internalType\":\"uint8\",\"name\":\"decimals\",\"type\":\"uint8\"}],\"name\":\"createSwapPair\",\"outputs\":[{\"internalType\":\"address\",\"name\":\"\",\"type\":\"address\"}],\"stateMutability\":\"nonpayable\",\"type\":\"function\"},{\"inputs\":[{\"internalType\":\"bytes32\",\"name\":\"ethTxHash\",\"type\":\"bytes32\"},{\"internalType\":\"address\",\"name\":\"erc20Addr\",\"type\":\"address\"},{\"internalType\":\"address\",\"name\":\"toAddress\",\"type\":\"address\"},{\"internalType\":\"uint256\",\"name\":\"amount\",\"type\":\"uint256\"}],\"name\":\"fillETH2BSCSwap\",\"outputs\":[{\"internalType\":\"bool\",\"name\":\"\",\"type\":\"bool\"}],\"stateMutability\":\"nonpayable\",\"type\":\"function\"},{\"inputs\":[{\"internalType\":\"address\",\"name\":\"bep20Impl\",\"type\":\"address\"},{\"internalType\":\"uint256\",\"name\":\"fee\",\"type\":\"uint256\"},{\"internalType\":\"addresspayable\",\"name\":\"ownerAddr\",\"type\":\"address\"},{\"internalType\":\"address\",\"name\":\"bep20ProxyAdminAddr\",\"type\":\"address\"}],\"name\":\"initialize\",\"outputs\":[],\"stateMutability\":\"nonpayable\",\"type\":\"function\"},{\"inputs\":[],\"name\":\"owner\",\"outputs\":[{\"internalType\":\"addresspayable\",\"name\":\"\",\"type\":\"address\"}],\"stateMutability\":\"view\",\"type\":\"function\"},{\"inputs\":[],\"name\":\"renounceOwnership\",\"outputs\":[],\"stateMutability\":\"nonpayable\",\"type\":\"function\"},{\"inputs\":[{\"internalType\":\"uint256\",\"name\":\"fee\",\"type\":\"uint256\"}],\"name\":\"setSwapFee\",\"outputs\":[],\"stateMutability\":\"nonpayable\",\"type\":\"function\"},{\"inputs\":[{\"internalType\":\"address\",\"name\":\"bep20Addr\",\"type\":\"address\"},{\"internalType\":\"uint256\",\"name\":\"amount\",\"type\":\"uint256\"}],\"name\":\"swapBSC2ETH\",\"outputs\":[{\"internalType\":\"bool\",\"name\":\"\",\"type\":\"bool\"}],\"stateMutability\":\"payable\",\"type\":\"function\"},{\"inputs\":[],\"name\":\"swapFee\",\"outputs\":[{\"internalType\":\"uint256\",\"name\":\"\",\"type\":\"uint256\"}],\"stateMutability\":\"view\",\"type\":\"function\"},{\"inputs\":[{\"internalType\":\"address\",\"name\":\"\",\"type\":\"address\"}],\"name\":\"swapMappingBSC2ETH\",\"outputs\":[{\"internalType\":\"address\",\"name\":\"\",\"type\":\"address\"}],\"stateMutability\":\"view\",\"type\":\"function\"},{\"inputs\":[{\"internalType\":\"address\",\"name\":\"\",\"type\":\"address\"}],\"name\":\"swapMappingETH2BSC\",\"outputs\":[{\"internalType\":\"address\",\"name\":\"\",\"type\":\"address\"}],\"stateMutability\":\"view\",\"type\":\"function\"},{\"inputs\":[{\"internalType\":\"addresspayable\",\"name\":\"newOwner\",\"type\":\"address\"}],\"name\":\"transferOwnership\",\"outputs\":[],\"stateMutability\":\"nonpayable\",\"type\":\"function\"}]"
 
-// bscSwapAgent is an auto generated Go binding around an Ethereum contract.
+// BSCSwapAgent is an auto generated Go binding around an Ethereum contract.
 type BSCSwapAgent struct {
 	BSCSwapAgentCaller     // Read-only binding to the contract
 	BSCSwapAgentTransactor // Write-only binding to the contract
@@ -89,7 +89,7 @@ type BSCSwapAgentTransactorRaw struct {
 	Contract *BSCSwapAgentTransactor // Generic write-only contract binding to access the raw methods on
 }
 
-// NewBSCSwapAgent creates a new instance of bscSwapAgent, bound to a specific deployed contract.
+// NewBSCSwapAgent creates a new instance of BSCSwapAgent, bound to a specific deployed contract.
 func NewBSCSwapAgent(address common.Address, backend bind.ContractBackend) (*BSCSwapAgent, error) {
 	contract, err := bindBSCSwapAgent(address, backend, backend, backend)
 	if err != nil {
@@ -98,7 +98,7 @@ func NewBSCSwapAgent(address common.Address, backend bind.ContractBackend) (*BSC
 	return &BSCSwapAgent{BSCSwapAgentCaller: BSCSwapAgentCaller{contract: contract}, BSCSwapAgentTransactor: BSCSwapAgentTransactor{contract: contract}, BSCSwapAgentFilterer: BSCSwapAgentFilterer{contract: contract}}, nil
 }
 
-// NewBSCSwapAgentCaller creates a new read-only instance of bscSwapAgent, bound to a specific deployed contract.
+// NewBSCSwapAgentCaller creates a new read-only instance of BSCSwapAgent, bound to a specific deployed contract.
 func NewBSCSwapAgentCaller(address common.Address, caller bind.ContractCaller) (*BSCSwapAgentCaller, error) {
 	contract, err := bindBSCSwapAgent(address, caller, nil, nil)
 	if err != nil {
@@ -107,7 +107,7 @@ func NewBSCSwapAgentCaller(address common.Address, caller bind.ContractCaller) (
 	return &BSCSwapAgentCaller{contract: contract}, nil
 }
 
-// NewBSCSwapAgentTransactor creates a new write-only instance of bscSwapAgent, bound to a specific deployed contract.
+// NewBSCSwapAgentTransactor creates a new write-only instance of BSCSwapAgent, bound to a specific deployed contract.
 func NewBSCSwapAgentTransactor(address common.Address, transactor bind.ContractTransactor) (*BSCSwapAgentTransactor, error) {
 	contract, err := bindBSCSwapAgent(address, nil, transactor, nil)
 	if err != nil {
@@ -116,7 +116,7 @@ func NewBSCSwapAgentTransactor(address common.Address, transactor bind.ContractT
 	return &BSCSwapAgentTransactor{contract: contract}, nil
 }
 
-// NewBSCSwapAgentFilterer creates a new log filterer instance of bscSwapAgent, bound to a specific deployed contract.
+// NewBSCSwapAgentFilterer creates a new log filterer instance of BSCSwapAgent, bound to a specific deployed contract.
 func NewBSCSwapAgentFilterer(address common.Address, filterer bind.ContractFilterer) (*BSCSwapAgentFilterer, error) {
 	contract, err := bindBSCSwapAgent(address, nil, nil, filterer)
 	if err != nil {
@@ -475,7 +475,7 @@ func (_BSCSwapAgent *BSCSwapAgentTransactorSession) TransferOwnership(newOwner c
 	return _BSCSwapAgent.Contract.TransferOwnership(&_BSCSwapAgent.TransactOpts, newOwner)
 }
 
-// BSCSwapAgentOwnershipTransferredIterator is returned from FilterOwnershipTransferred and is used to iterate over the raw logs and unpacked data for OwnershipTransferred events raised by the bscSwapAgent contract.
+// BSCSwapAgentOwnershipTransferredIterator is returned from FilterOwnershipTransferred and is used to iterate over the raw logs and unpacked data for OwnershipTransferred events raised by the BSCSwapAgent contract.
 type BSCSwapAgentOwnershipTransferredIterator struct {
 	Event *BSCSwapAgentOwnershipTransferred // Event containing the contract specifics and raw log
 
@@ -542,7 +542,7 @@ func (it *BSCSwapAgentOwnershipTransferredIterator) Close() error {
 	return nil
 }
 
-// BSCSwapAgentOwnershipTransferred represents a OwnershipTransferred event raised by the bscSwapAgent contract.
+// BSCSwapAgentOwnershipTransferred represents a OwnershipTransferred event raised by the BSCSwapAgent contract.
 type BSCSwapAgentOwnershipTransferred struct {
 	PreviousOwner common.Address
 	NewOwner      common.Address
@@ -627,7 +627,7 @@ func (_BSCSwapAgent *BSCSwapAgentFilterer) ParseOwnershipTransferred(log types.L
 	return event, nil
 }
 
-// BSCSwapAgentSwapFilledIterator is returned from FilterSwapFilled and is used to iterate over the raw logs and unpacked data for SwapFilled events raised by the bscSwapAgent contract.
+// BSCSwapAgentSwapFilledIterator is returned from FilterSwapFilled and is used to iterate over the raw logs and unpacked data for SwapFilled events raised by the BSCSwapAgent contract.
 type BSCSwapAgentSwapFilledIterator struct {
 	Event *BSCSwapAgentSwapFilled // Event containing the contract specifics and raw log
 
@@ -694,7 +694,7 @@ func (it *BSCSwapAgentSwapFilledIterator) Close() error {
 	return nil
 }
 
-// BSCSwapAgentSwapFilled represents a SwapFilled event raised by the bscSwapAgent contract.
+// BSCSwapAgentSwapFilled represents a SwapFilled event raised by the BSCSwapAgent contract.
 type BSCSwapAgentSwapFilled struct {
 	Bep20Addr common.Address
 	EthTxHash [32]byte
@@ -789,7 +789,7 @@ func (_BSCSwapAgent *BSCSwapAgentFilterer) ParseSwapFilled(log types.Log) (*BSCS
 	return event, nil
 }
 
-// BSCSwapAgentSwapPairCreatedIterator is returned from FilterSwapPairCreated and is used to iterate over the raw logs and unpacked data for SwapPairCreated events raised by the bscSwapAgent contract.
+// BSCSwapAgentSwapPairCreatedIterator is returned from FilterSwapPairCreated and is used to iterate over the raw logs and unpacked data for SwapPairCreated events raised by the BSCSwapAgent contract.
 type BSCSwapAgentSwapPairCreatedIterator struct {
 	Event *BSCSwapAgentSwapPairCreated // Event containing the contract specifics and raw log
 
@@ -856,7 +856,7 @@ func (it *BSCSwapAgentSwapPairCreatedIterator) Close() error {
 	return nil
 }
 
-// BSCSwapAgentSwapPairCreated represents a SwapPairCreated event raised by the bscSwapAgent contract.
+// BSCSwapAgentSwapPairCreated represents a SwapPairCreated event raised by the BSCSwapAgent contract.
 type BSCSwapAgentSwapPairCreated struct {
 	EthRegisterTxHash [32]byte
 	Bep20Addr         common.Address
@@ -953,7 +953,7 @@ func (_BSCSwapAgent *BSCSwapAgentFilterer) ParseSwapPairCreated(log types.Log) (
 	return event, nil
 }
 
-// BSCSwapAgentSwapStartedIterator is returned from FilterSwapStarted and is used to iterate over the raw logs and unpacked data for SwapStarted events raised by the bscSwapAgent contract.
+// BSCSwapAgentSwapStartedIterator is returned from FilterSwapStarted and is used to iterate over the raw logs and unpacked data for SwapStarted events raised by the BSCSwapAgent contract.
 type BSCSwapAgentSwapStartedIterator struct {
 	Event *BSCSwapAgentSwapStarted // Event containing the contract specifics and raw log
 
@@ -1020,7 +1020,7 @@ func (it *BSCSwapAgentSwapStartedIterator) Close() error {
 	return nil
 }
 
-// BSCSwapAgentSwapStarted represents a SwapStarted event raised by the bscSwapAgent contract.
+// BSCSwapAgentSwapStarted represents a SwapStarted event raised by the BSCSwapAgent contract.
 type BSCSwapAgentSwapStarted struct {
 	Bep20Addr common.Address
 	Erc20Addr common.Address

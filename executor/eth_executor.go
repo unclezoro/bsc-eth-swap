@@ -1,14 +1,13 @@
 package executor
 
 import (
-	"bytes"
 	"context"
+	"github.com/ethereum/go-ethereum"
 	"math/big"
 	"strings"
 	"time"
 
 	"github.com/ethereum/go-ethereum/accounts/abi"
-	"github.com/ethereum/go-ethereum/accounts/abi/bind"
 	ethcmm "github.com/ethereum/go-ethereum/common"
 	"github.com/ethereum/go-ethereum/core/types"
 	"github.com/ethereum/go-ethereum/ethclient"
@@ -16,7 +15,6 @@ import (
 	agent "github.com/binance-chain/bsc-eth-swap/abi"
 	contractabi "github.com/binance-chain/bsc-eth-swap/abi"
 	"github.com/binance-chain/bsc-eth-swap/common"
-	"github.com/binance-chain/bsc-eth-swap/model"
 	"github.com/binance-chain/bsc-eth-swap/util"
 )
 
@@ -24,6 +22,7 @@ type EthExecutor struct {
 	Chain  string
 	Config *util.Config
 
+	SwapAgentAddr    ethcmm.Address
 	ethSwapAgentInst *contractabi.ETHSwapAgent
 	SwapAgentAbi     abi.ABI
 	Client           *ethclient.Client
@@ -42,6 +41,7 @@ func NewEthExecutor(ethClient *ethclient.Client, swapAddr string, config *util.C
 	return &EthExecutor{
 		Chain:            common.ChainETH,
 		Config:           config,
+		SwapAgentAddr:    ethcmm.HexToAddress(swapAddr),
 		ethSwapAgentInst: ethSwapAgentInst,
 		SwapAgentAbi:     agentAbi,
 		Client:           ethClient,
@@ -92,71 +92,75 @@ func (e *EthExecutor) GetLogs(header *types.Header) ([]interface{}, error) {
 }
 
 func (e *EthExecutor) GetSwapPairRegisterLogs(header *types.Header) ([]interface{}, error) {
-	blockHeight := header.Number.Uint64()
-	registerEventsIterator, err := e.ethSwapAgentInst.FilterSwapPairRegister(&bind.FilterOpts{
-		Start:   blockHeight,
-		End:     &blockHeight,
-		Context: context.Background(),
-	}, nil, nil)
-	if err != nil || registerEventsIterator == nil {
+	topics := [][]ethcmm.Hash{{SwapPairRegisterEventHash}}
+
+	blockHash := header.Hash()
+
+	ctxWithTimeout, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+
+	logs, err := e.Client.FilterLogs(ctxWithTimeout, ethereum.FilterQuery{
+		BlockHash: &blockHash,
+		Topics:    topics,
+		Addresses: []ethcmm.Address{e.SwapAgentAddr},
+	})
+	if err != nil {
 		return nil, err
 	}
 
-	blockHash := header.Hash()
-	eventModels := make([]interface{}, 0)
-	for registerEventsIterator.Next() {
-		if !bytes.Equal(registerEventsIterator.Event.Raw.BlockHash[:], blockHash[:]) {
-			util.Logger.Debugf("Block hash mismatch, height %d, expected block hash %s, got block hash %s", header.Number.Uint64(), blockHash.String(), registerEventsIterator.Event.Raw.BlockHash.String())
+	eventModels := make([]interface{}, 0, len(logs))
+	for _, log := range logs {
+		event, err := ParseSwapPairRegisterEvent(&e.SwapAgentAbi, &log)
+		if err != nil {
+			util.Logger.Errorf("parse event log error, er=%s", err.Error())
 			continue
 		}
-		util.Logger.Debugf("Got register event log: %d, %s", header.Number, registerEventsIterator.Event.Raw.TxHash.String())
-		eventModel := &model.SwapPairRegisterTxLog{
-			ETHTokenContractAddr: registerEventsIterator.Event.Erc20Addr.String(),
-			Symbol:               registerEventsIterator.Event.Symbol,
-			Name:                 registerEventsIterator.Event.Name,
-			Decimals:             int(registerEventsIterator.Event.Decimals),
-
-			BlockHash: header.Hash().Hex(),
-			TxHash:    registerEventsIterator.Event.Raw.TxHash.String(),
-			Height:    header.Number.Int64(),
+		if event == nil {
+			continue
 		}
+
+		eventModel := event.ToSwapPairRegisterLog(&log)
 		eventModel.Chain = e.Chain
+		util.Logger.Debugf("Found register event, erc20 address: %d, name: %s, symbol: %s, decimals: %d",
+			eventModel.ETHTokenContractAddr, eventModel.Name, eventModel.Symbol, eventModel.Decimals)
 		eventModels = append(eventModels, eventModel)
 	}
 	return eventModels, nil
 }
 
 func (e *EthExecutor) GetSwapStartLogs(header *types.Header) ([]interface{}, error) {
-	blockHeight := header.Number.Uint64()
-	swapStartedIterator, err := e.ethSwapAgentInst.FilterSwapStarted(&bind.FilterOpts{
-		Start:   blockHeight,
-		End:     &blockHeight,
-		Context: context.Background(),
-	}, nil, nil)
-	if err != nil || swapStartedIterator == nil {
+	topics := [][]ethcmm.Hash{{ETH2BSCSwapStartedEventHash}}
+
+	blockHash := header.Hash()
+
+	ctxWithTimeout, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+
+	logs, err := e.Client.FilterLogs(ctxWithTimeout, ethereum.FilterQuery{
+		BlockHash: &blockHash,
+		Topics:    topics,
+		Addresses: []ethcmm.Address{e.SwapAgentAddr},
+	})
+	if err != nil {
 		return nil, err
 	}
 
-	blockHash := header.Hash()
-	eventModels := make([]interface{}, 0)
-	for swapStartedIterator.Next() {
-		if !bytes.Equal(swapStartedIterator.Event.Raw.BlockHash[:], blockHash[:]) {
-			util.Logger.Debugf("Block hash mismatch, height %d, expected block hash %s, got block hash %s", header.Number.Uint64(), blockHash.String(), swapStartedIterator.Event.Raw.BlockHash.String())
+	eventModels := make([]interface{}, 0, len(logs))
+	for _, log := range logs {
+		event, err := ParseETH2BSCSwapStartEvent(&e.SwapAgentAbi, &log)
+		if err != nil {
+			util.Logger.Errorf("parse event log error, er=%s", err.Error())
 			continue
 		}
-		util.Logger.Debugf("Get swap start event log: %d, %s, %s", header.Number, swapStartedIterator.Event.Raw.TxHash.String())
-		eventModel := &model.SwapStartTxLog{
-			ContractAddress: swapStartedIterator.Event.Erc20Addr.String(),
-			FromAddress:     swapStartedIterator.Event.FromAddr.String(),
-			Amount:          swapStartedIterator.Event.Amount.String(),
-			FeeAmount:       swapStartedIterator.Event.FeeAmount.String(),
-			BlockHash:       header.Hash().Hex(),
 
-			TxHash: swapStartedIterator.Event.Raw.TxHash.String(),
-			Height: header.Number.Int64(),
+		if event == nil {
+			continue
 		}
-		eventModel.Chain = e.Chain
 
+		eventModel := event.ToSwapStartTxLog(&log)
+		eventModel.Chain = e.Chain
+		util.Logger.Infof("Found ETH2BSC swap, txHash: %s, token address: %s, amount: %s, fee amount: %s",
+			eventModel.TxHash, eventModel.ContractAddress, eventModel.Amount, eventModel.FeeAmount)
 		eventModels = append(eventModels, eventModel)
 	}
 	return eventModels, nil

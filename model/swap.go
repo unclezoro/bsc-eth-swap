@@ -14,7 +14,6 @@ type SwapStartTxLog struct {
 
 	ContractAddress string `gorm:"not null"`
 	FromAddress     string `gorm:"not null"`
-	ToAddress       string `gorm:"not null"`
 	Amount          string `gorm:"not null"`
 	FeeAmount       string `gorm:"not null"`
 

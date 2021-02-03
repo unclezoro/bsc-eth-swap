@@ -25,6 +25,7 @@ import (
 	tsssdksecure "github.com/binance-chain/tss-zerotrust-sdk/secure"
 	tsssdktypes "github.com/binance-chain/tss-zerotrust-sdk/types"
 
+	contractabi "github.com/binance-chain/bsc-eth-swap/abi"
 	"github.com/binance-chain/bsc-eth-swap/common"
 	"github.com/binance-chain/bsc-eth-swap/model"
 	"github.com/binance-chain/bsc-eth-swap/util"
@@ -268,4 +269,21 @@ func buildSignedTransaction(network string, txSender, contract ethcom.Address, e
 	}
 
 	return &signedTx, nil
+}
+
+func queryDeployedBEP20ContractAddr(erc20Addr ethcom.Address, bscSwapAgentAddr ethcom.Address, txRecipient *types.Receipt, bscClient *ethclient.Client) (ethcom.Address, error) {
+	swapAgentInstance, err := contractabi.NewBSCSwapAgent(bscSwapAgentAddr, bscClient)
+	if err != nil {
+		return ethcom.Address{}, err
+	}
+	if len(txRecipient.Logs) != 2 {
+		return ethcom.Address{}, fmt.Errorf("Expected tx logs length in recipient is 2, actual it is %d", len(txRecipient.Logs))
+	}
+	createSwapEvent, err := swapAgentInstance.ParseSwapPairCreated(*txRecipient.Logs[1])
+	if err != nil || createSwapEvent == nil {
+		return ethcom.Address{}, err
+	}
+
+	util.Logger.Debugf("Deployed bep20 contact %s for register erc20 %s", createSwapEvent.Bep20Addr.String(), erc20Addr.String())
+	return createSwapEvent.Bep20Addr, nil
 }

@@ -177,7 +177,7 @@ func (engine *SwapEngine) createSwap(txEventLog *model.SwapStartTxLog) *model.Sw
 			}
 		} else {
 			bscContractAddr = ethcom.HexToAddress(txEventLog.ContractAddress)
-			if ethContractAddr, ok = engine.ethToBscContractAddr[ethcom.HexToAddress(txEventLog.ContractAddress)]; !ok {
+			if ethContractAddr, ok = engine.bscToEthContractAddr[ethcom.HexToAddress(txEventLog.ContractAddress)]; !ok {
 				return fmt.Errorf("unsupported bsc token contract address: %s", txEventLog.ContractAddress)
 			}
 		}
@@ -294,7 +294,7 @@ func (engine *SwapEngine) createSwapDaemon() {
 			engine.mutex.RLock()
 			defer engine.mutex.RUnlock()
 
-			util.Logger.Infof("start new swap daemon for %s", bscContractAddr)
+			util.Logger.Infof("start new swap daemon for %s", bscContractAddr.String())
 			tokenInstance, ok := engine.swapPairs[bscContractAddr]
 			if !ok {
 				util.Logger.Errorf("unexpected error, can't find token install for bsc contract %s", bscContractAddr)
@@ -309,19 +309,20 @@ func (engine *SwapEngine) createSwapDaemon() {
 }
 
 func (engine *SwapEngine) swapInstanceDaemon(direction common.SwapDirection, swapPairInstance *SwapPairIns) {
-	bscContract := swapPairInstance.BSCTokenContractAddr
-	util.Logger.Infof("start swap daemon for bsc token %s, direction %s", bscContract, direction)
+	bep20Addr := swapPairInstance.BSCTokenContractAddr
+	erc20Addr := swapPairInstance.ETHTokenContractAddr
+	util.Logger.Infof("start swap daemon, direction %s, symbol: %s, bep20 token %s, erc20 token %s", direction, swapPairInstance.Symbol, bep20Addr.String(), erc20Addr.String())
 	for {
 
 		swaps := make([]model.Swap, 0)
-		engine.db.Where("status in (?) and bsc_contract_addr = ? and direction = ?", []common.SwapStatus{SwapConfirmed, SwapSending}, bscContract.String(), direction).Order("id asc").Limit(BatchSize).Find(&swaps)
+		engine.db.Where("status in (?) and bsc_contract_addr = ? and direction = ?", []common.SwapStatus{SwapConfirmed, SwapSending}, bep20Addr.String(), direction).Order("id asc").Limit(BatchSize).Find(&swaps)
 
 		if len(swaps) == 0 {
 			time.Sleep(SwapSleepSecond * time.Second)
 			continue
 		}
 
-		util.Logger.Infof("found %d confirmed swap requests on token %s", len(swaps), bscContract.String())
+		util.Logger.Infof("found %d confirmed swap requests on token %s", len(swaps), bep20Addr.String())
 
 		for _, swap := range swaps {
 			if !engine.verifySwap(&swap) {
@@ -376,7 +377,7 @@ func (engine *SwapEngine) swapInstanceDaemon(direction common.SwapDirection, swa
 				continue
 			}
 
-			util.Logger.Infof("do swap token %s , direction %s, sponsor: %s, amount %s, decimals %d,", bscContract.String(), direction, swap.Sponsor, swap.Amount, swap.Decimals)
+			util.Logger.Infof("do swap token %s , direction %s, sponsor: %s, amount %s, decimals %d,", bep20Addr.String(), direction, swap.Sponsor, swap.Amount, swap.Decimals)
 			swapTx, swapErr := engine.doSwap(&swap, swapPairInstance)
 
 			writeDBErr = func() error {
@@ -443,7 +444,7 @@ func (engine *SwapEngine) doSwap(swap *model.Swap, swapPairInstance *SwapPairIns
 	if swap.Direction == SwapEth2BSC {
 		bscClientMutex.Lock()
 		defer bscClientMutex.Unlock()
-		data, err := abiEncodeFillETH2BSCSwap(ethcom.HexToHash(swap.StartTxHash), swapPairInstance.BSCTokenContractAddr, ethcom.HexToAddress(swap.Sponsor), amount, engine.bscSwapAgentABi)
+		data, err := abiEncodeFillETH2BSCSwap(ethcom.HexToHash(swap.StartTxHash), swapPairInstance.ETHTokenContractAddr, ethcom.HexToAddress(swap.Sponsor), amount, engine.bscSwapAgentABi)
 		if err != nil {
 			return nil, err
 		}

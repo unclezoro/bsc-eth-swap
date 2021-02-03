@@ -278,7 +278,7 @@ func (engine *SwapPairEngine) swapPairInstanceDaemon() {
 			}
 
 			util.Logger.Infof("do swapPairSM %s, symbol %s", swapPairSM.ETHTokenContractAddr, swapPairSM.Symbol)
-			swapPairTx, swapErr := engine.doCreateSwapPair(&swapPairSM)
+			swapPairCreateTx, swapErr := engine.doCreateSwapPair(&swapPairSM)
 
 			writeDBErr = func() error {
 				tx := engine.db.Begin()
@@ -296,8 +296,8 @@ func (engine *SwapPairEngine) swapPairInstanceDaemon() {
 					} else {
 						util.SendTelegramMessage(fmt.Sprintf("do swapPairSM failed: %s, start hash %s", swapErr.Error(), swapPairSM.PairRegisterTxHash))
 						createPairTxHash := ""
-						if swapPairTx != nil {
-							createPairTxHash = swapPairTx.SwapPairCreatTxHash
+						if swapPairCreateTx != nil {
+							createPairTxHash = swapPairCreateTx.SwapPairCreatTxHash
 						}
 
 						swapPairSM.Status = SwapPairSendFailed
@@ -306,14 +306,14 @@ func (engine *SwapPairEngine) swapPairInstanceDaemon() {
 						engine.updateSwapPairSM(tx, &swapPairSM)
 					}
 				} else {
-					tx.Model(model.SwapFillTx{}).Where("id = ?", swapPairTx.ID).Updates(
+					tx.Model(model.SwapPairCreatTx{}).Where("id = ?", swapPairCreateTx.ID).Updates(
 						map[string]interface{}{
 							"status":     model.FillTxSent,
 							"updated_at": time.Now().Unix(),
 						})
 
 					swapPairSM.Status = SwapPairSent
-					swapPairSM.PairCreatTxHash = swapPairTx.SwapPairCreatTxHash
+					swapPairSM.PairCreatTxHash = swapPairCreateTx.SwapPairCreatTxHash
 					engine.updateSwapPairSM(tx, &swapPairSM)
 				}
 
@@ -345,7 +345,6 @@ func (engine *SwapPairEngine) doCreateSwapPair(swapPairSM *model.SwapPairStateMa
 		SwapPairRegisterTxHash: swapPairSM.PairRegisterTxHash,
 		SwapPairCreatTxHash:    signedTx.Hash().String(),
 		ETHTokenContractAddr:   swapPairSM.ETHTokenContractAddr,
-		BSCTokenContractAddr:   "",
 		Symbol:                 swapPairSM.Symbol,
 		Name:                   swapPairSM.Name,
 		Decimals:               swapPairSM.Decimals,
@@ -498,6 +497,15 @@ func (engine *SwapPairEngine) trackSwapPairTxDaemon() {
 							swapPairSM.Log = "create swapPairSM pair tx is failed"
 							engine.updateSwapPairSM(tx, swapPairSM)
 						} else {
+							bep20ContractAddr, err := queryDeployedBEP20ContractAddr(
+								ethcom.HexToAddress(swapPairTx.ETHTokenContractAddr),
+								ethcom.HexToAddress(engine.config.ChainConfig.BSCSwapAgentAddr),
+								txRecipient,
+								engine.bscClient)
+							if err != nil {
+								tx.Rollback()
+								return err
+							}
 							tx.Model(model.SwapPairCreatTx{}).Where("id = ?", swapPairTx.ID).Updates(
 								map[string]interface{}{
 									"status":              model.FillTxSuccess,
@@ -512,6 +520,7 @@ func (engine *SwapPairEngine) trackSwapPairTxDaemon() {
 								return err
 							}
 							swapPairSM.Status = SwapPairSuccess
+							swapPairSM.BSCTokenContractAddr = bep20ContractAddr.String()
 							engine.updateSwapPairSM(tx, swapPairSM)
 						}
 					}

@@ -14,8 +14,8 @@ type SwapPair struct {
 	Symbol               string `gorm:"not null;index:symbol"`
 	Name                 string `gorm:"not null"`
 	Decimals             int    `gorm:"not null"`
-	BSCTokenContractAddr string `gorm:"unique;not null"`
-	ETHTokenContractAddr string `gorm:"unique;not null"`
+	BSCTokenContractAddr string `gorm:"not null"`
+	ETHTokenContractAddr string `gorm:"not null"`
 	Available            bool   `gorm:"not null;index:available"`
 	LowBound             string `gorm:"not null"`
 	UpperBound           string `gorm:"not null"`
@@ -67,7 +67,6 @@ type SwapPairCreatTx struct {
 	SwapPairCreatTxHash    string `gorm:"unique;not null"`
 
 	ETHTokenContractAddr string `gorm:"not null"`
-	BSCTokenContractAddr string `gorm:"not null"`
 
 	Symbol   string `gorm:"not null;index:swap_pair_creat_tx_symbol"`
 	Name     string `gorm:"not null"`
