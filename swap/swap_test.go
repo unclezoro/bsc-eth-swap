@@ -41,8 +41,8 @@ func TestSwap_SwapInstanceCheck(t *testing.T) {
 	db.Find(&tokens)
 
 	for _, token := range tokens {
-		require.Equal(t, token.Symbol, swapInstance.BscToEthContractAddr[strings.ToLower(token.BSCTokenContractAddr)])
-		require.Equal(t, token.Symbol, swapInstance.ETHToBscContractAddr[strings.ToLower(token.ETHTokenContractAddr)])
+		require.Equal(t, token.Symbol, swapInstance.BscToEthContractAddr[strings.ToLower(token.BEP20Addr)])
+		require.Equal(t, token.Symbol, swapInstance.ETHToBscContractAddr[strings.ToLower(token.ERC20Addr)])
 	}
 }
 
@@ -70,11 +70,11 @@ func TestSwap_ETH2BSC(t *testing.T) {
 	txEventLog := model.SwapStartTxLog{
 		Chain: common.ChainETH,
 
-		ContractAddress: "0x055d208b90DA0E3A431CA7E0fba326888Ef8a822",
-		FromAddress:     clientAccount.String(),
-		ToAddress:       "",
-		Amount:          "1000",
-		FeeAmount:       "100000",
+		TokenAddr:   "0x055d208b90DA0E3A431CA7E0fba326888Ef8a822",
+		FromAddress: clientAccount.String(),
+		ToAddress:   "",
+		Amount:      "1000",
+		FeeAmount:   "100000",
 
 		Status:       model.TxStatusInit,
 		TxHash:       NewSHA1Hash(),
@@ -108,11 +108,11 @@ func TestSwap_ETH2BSC(t *testing.T) {
 	txEventLog = model.SwapStartTxLog{
 		Chain: common.ChainETH,
 
-		ContractAddress: "0x055d208b90DA0E3A431CA7E0fba326888Ef8a822",
-		FromAddress:     clientAccount.String(),
-		ToAddress:       "",
-		Amount:          "1000000000000000000",
-		FeeAmount:       "100000",
+		TokenAddr:   "0x055d208b90DA0E3A431CA7E0fba326888Ef8a822",
+		FromAddress: clientAccount.String(),
+		ToAddress:   "",
+		Amount:      "1000000000000000000",
+		FeeAmount:   "100000",
 
 		Status:       model.TxStatusInit,
 		TxHash:       NewSHA1Hash(),
@@ -203,11 +203,11 @@ func TestSwap_BSC2ETH(t *testing.T) {
 	txEventLog := model.SwapStartTxLog{
 		Chain: common.ChainBSC,
 
-		ContractAddress: "0xCCE0532FE1029f1A6B7ccca4C522cF9870a6a8Ed",
-		FromAddress:     clientAccount.String(),
-		ToAddress:       "",
-		Amount:          "1000",
-		FeeAmount:       "100000",
+		TokenAddr:   "0xCCE0532FE1029f1A6B7ccca4C522cF9870a6a8Ed",
+		FromAddress: clientAccount.String(),
+		ToAddress:   "",
+		Amount:      "1000",
+		FeeAmount:   "100000",
 
 		Status:       model.TxStatusInit,
 		TxHash:       NewSHA1Hash(),
@@ -241,11 +241,11 @@ func TestSwap_BSC2ETH(t *testing.T) {
 	txEventLog = model.SwapStartTxLog{
 		Chain: common.ChainBSC,
 
-		ContractAddress: "0xCCE0532FE1029f1A6B7ccca4C522cF9870a6a8Ed",
-		FromAddress:     clientAccount.String(),
-		ToAddress:       "",
-		Amount:          "1000000000000000000",
-		FeeAmount:       "100000",
+		TokenAddr:   "0xCCE0532FE1029f1A6B7ccca4C522cF9870a6a8Ed",
+		FromAddress: clientAccount.String(),
+		ToAddress:   "",
+		Amount:      "1000000000000000000",
+		FeeAmount:   "100000",
 
 		Status:       model.TxStatusInit,
 		TxHash:       NewSHA1Hash(),
@@ -325,11 +325,11 @@ func TestSwap_UnsupportedToken(t *testing.T) {
 	txEventLog := model.SwapStartTxLog{
 		Chain: common.ChainBSC,
 
-		ContractAddress: "0x8f36F4A709409a95a0df90cbc43ED9a658E11E4A", // DEF token
-		FromAddress:     clientAccount.String(),
-		ToAddress:       "",
-		Amount:          "1000000000000000000",
-		FeeAmount:       "100000",
+		TokenAddr:   "0x8f36F4A709409a95a0df90cbc43ED9a658E11E4A", // DEF token
+		FromAddress: clientAccount.String(),
+		ToAddress:   "",
+		Amount:      "1000000000000000000",
+		FeeAmount:   "100000",
 
 		Status:       model.TxStatusInit,
 		TxHash:       NewSHA1Hash(),

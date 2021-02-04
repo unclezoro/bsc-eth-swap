@@ -31,9 +31,9 @@ type ETH2BSCSwapStartedEvent struct {
 
 func (ev *ETH2BSCSwapStartedEvent) ToSwapStartTxLog(log *types.Log) *model.SwapStartTxLog {
 	pack := &model.SwapStartTxLog{
-		ContractAddress: ev.ERC20Addr.String(),
-		FromAddress:     ev.FromAddr.String(),
-		Amount:          ev.Amount.String(),
+		TokenAddr:   ev.ERC20Addr.String(),
+		FromAddress: ev.FromAddr.String(),
+		Amount:      ev.Amount.String(),
 
 		FeeAmount: ev.FeeAmount.String(),
 		BlockHash: log.BlockHash.Hex(),
@@ -67,9 +67,9 @@ type BSC2ETHSwapStartedEvent struct {
 
 func (ev *BSC2ETHSwapStartedEvent) ToSwapStartTxLog(log *types.Log) *model.SwapStartTxLog {
 	pack := &model.SwapStartTxLog{
-		ContractAddress: ev.BEP20Addr.String(),
-		FromAddress:     ev.FromAddr.String(),
-		Amount:          ev.Amount.String(),
+		TokenAddr:   ev.BEP20Addr.String(),
+		FromAddress: ev.FromAddr.String(),
+		Amount:      ev.Amount.String(),
 
 		FeeAmount: ev.FeeAmount.String(),
 		BlockHash: log.BlockHash.Hex(),
@@ -111,11 +111,11 @@ type SwapPairRegisterEvent struct {
 
 func (ev *SwapPairRegisterEvent) ToSwapPairRegisterLog(log *types.Log) *model.SwapPairRegisterTxLog {
 	pack := &model.SwapPairRegisterTxLog{
-		ETHTokenContractAddr: ev.ContractAddr.String(),
-		Sponsor:              ev.Sponsor.String(),
-		Symbol:               ev.Symbol,
-		Name:                 ev.Name,
-		Decimals:             int(ev.Decimals),
+		ERC20Addr: ev.ContractAddr.String(),
+		Sponsor:   ev.Sponsor.String(),
+		Symbol:    ev.Symbol,
+		Name:      ev.Name,
+		Decimals:  int(ev.Decimals),
 
 		BlockHash: log.BlockHash.Hex(),
 		TxHash:    log.TxHash.String(),

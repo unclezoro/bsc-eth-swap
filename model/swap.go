@@ -12,10 +12,10 @@ type SwapStartTxLog struct {
 	Id    int64
 	Chain string `gorm:"not null;index:swap_start_tx_log_chain"`
 
-	ContractAddress string `gorm:"not null"`
-	FromAddress     string `gorm:"not null"`
-	Amount          string `gorm:"not null"`
-	FeeAmount       string `gorm:"not null"`
+	TokenAddr   string `gorm:"not null"`
+	FromAddress string `gorm:"not null"`
+	Amount      string `gorm:"not null"`
+	FeeAmount   string `gorm:"not null"`
 
 	Status       TxStatus `gorm:"not null;index:swap_start_tx_log_status"`
 	TxHash       string   `gorm:"not null;index:swap_start_tx_log_tx_hash"`
@@ -63,12 +63,12 @@ type Swap struct {
 	// the user addreess who start this swap
 	Sponsor string `gorm:"not null;index:swap_sponsor"`
 
-	BscContractAddr string `gorm:"not null;index:swap_bsc_contract_addr"`
-	EThContractAddr string `gorm:"not null;index:swap_eth_contract_addr"`
-	Symbol          string
-	Amount          string               `gorm:"not null;index:swap_amount"`
-	Decimals        int                  `gorm:"not null"`
-	Direction       common.SwapDirection `gorm:"not null"`
+	BEP20Addr string `gorm:"not null;index:swap_bep20_addr"`
+	ERC20Addr string `gorm:"not null;index:swap_erc20_addr"`
+	Symbol    string
+	Amount    string               `gorm:"not null;index:swap_amount"`
+	Decimals  int                  `gorm:"not null"`
+	Direction common.SwapDirection `gorm:"not null;index:swap_direction"`
 
 	// The tx hash confirmed deposit
 	StartTxHash string `gorm:"not null;index:swap_start_tx_hash"`

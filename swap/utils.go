@@ -47,14 +47,14 @@ func buildSwapPairInstance(pairs []model.SwapPair) (map[ethcom.Address]*SwapPair
 			panic(fmt.Sprintf("invalid upperBound amount: %s", pair.LowBound))
 		}
 
-		swapPairInstances[ethcom.HexToAddress(pair.BSCTokenContractAddr)] = &SwapPairIns{
-			Symbol:               pair.Symbol,
-			Name:                 pair.Name,
-			Decimals:             pair.Decimals,
-			LowBound:             lowBound,
-			UpperBound:           upperBound,
-			BSCTokenContractAddr: ethcom.HexToAddress(pair.BSCTokenContractAddr),
-			ETHTokenContractAddr: ethcom.HexToAddress(pair.ETHTokenContractAddr),
+		swapPairInstances[ethcom.HexToAddress(pair.BEP20Addr)] = &SwapPairIns{
+			Symbol:     pair.Symbol,
+			Name:       pair.Name,
+			Decimals:   pair.Decimals,
+			LowBound:   lowBound,
+			UpperBound: upperBound,
+			BEP20Addr:  ethcom.HexToAddress(pair.BEP20Addr),
+			ERC20Addr:  ethcom.HexToAddress(pair.ERC20Addr),
 		}
 	}
 

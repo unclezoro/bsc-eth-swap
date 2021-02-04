@@ -111,7 +111,7 @@ func (e *BscExecutor) GetSwapStartLogs(header *types.Header) ([]interface{}, err
 		eventModel := event.ToSwapStartTxLog(&log)
 		eventModel.Chain = e.Chain
 		util.Logger.Infof("Found BSC2ETH swap, txHash: %s, token address: %s, amount: %s, fee amount: %s",
-			eventModel.TxHash, eventModel.ContractAddress, eventModel.Amount, eventModel.FeeAmount)
+			eventModel.TxHash, eventModel.TokenAddr, eventModel.Amount, eventModel.FeeAmount)
 		eventModels = append(eventModels, eventModel)
 	}
 	return eventModels, nil

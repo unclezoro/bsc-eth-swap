@@ -122,7 +122,7 @@ func (e *EthExecutor) GetSwapPairRegisterLogs(header *types.Header) ([]interface
 		eventModel := event.ToSwapPairRegisterLog(&log)
 		eventModel.Chain = e.Chain
 		util.Logger.Debugf("Found register event, erc20 address: %d, name: %s, symbol: %s, decimals: %d",
-			eventModel.ETHTokenContractAddr, eventModel.Name, eventModel.Symbol, eventModel.Decimals)
+			eventModel.ERC20Addr, eventModel.Name, eventModel.Symbol, eventModel.Decimals)
 		eventModels = append(eventModels, eventModel)
 	}
 	return eventModels, nil
@@ -160,7 +160,7 @@ func (e *EthExecutor) GetSwapStartLogs(header *types.Header) ([]interface{}, err
 		eventModel := event.ToSwapStartTxLog(&log)
 		eventModel.Chain = e.Chain
 		util.Logger.Infof("Found ETH2BSC swap, txHash: %s, token address: %s, amount: %s, fee amount: %s",
-			eventModel.TxHash, eventModel.ContractAddress, eventModel.Amount, eventModel.FeeAmount)
+			eventModel.TxHash, eventModel.TokenAddr, eventModel.Amount, eventModel.FeeAmount)
 		eventModels = append(eventModels, eventModel)
 	}
 	return eventModels, nil

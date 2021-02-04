@@ -36,8 +36,8 @@ func NewSwapEngine(db *gorm.DB, cfg *util.Config, bscClient, ethClient *ethclien
 	bscContractAddrToEthContractAddr := make(map[ethcom.Address]ethcom.Address)
 	ethContractAddrToBscContractAddr := make(map[ethcom.Address]ethcom.Address)
 	for _, token := range pairs {
-		bscContractAddrToEthContractAddr[ethcom.HexToAddress(token.BSCTokenContractAddr)] = ethcom.HexToAddress(token.ETHTokenContractAddr)
-		ethContractAddrToBscContractAddr[ethcom.HexToAddress(token.ETHTokenContractAddr)] = ethcom.HexToAddress(token.BSCTokenContractAddr)
+		bscContractAddrToEthContractAddr[ethcom.HexToAddress(token.BEP20Addr)] = ethcom.HexToAddress(token.ERC20Addr)
+		ethContractAddrToBscContractAddr[ethcom.HexToAddress(token.ERC20Addr)] = ethcom.HexToAddress(token.BEP20Addr)
 	}
 
 	keyConfig, err := GetKeyConfig(cfg)
@@ -66,24 +66,24 @@ func NewSwapEngine(db *gorm.DB, cfg *util.Config, bscClient, ethClient *ethclien
 	}
 
 	swapEngine := &SwapEngine{
-		db:                    db,
-		config:                cfg,
-		hmacCKey:              keyConfig.HMACKey,
-		tssClientSecureConfig: NewClientSecureConfig(keyConfig),
-		bscClient:             bscClient,
-		ethClient:             ethClient,
-		bscChainID:            bscChainID.Int64(),
-		ethChainID:            ethChainID.Int64(),
-		bscTxSender:           ethcom.HexToAddress(cfg.KeyManagerConfig.BSCAccountAddr),
-		ethTxSender:           ethcom.HexToAddress(cfg.KeyManagerConfig.ETHAccountAddr),
-		swapPairs:             swapPairInstances,
-		bscToEthContractAddr:  bscContractAddrToEthContractAddr,
-		ethToBscContractAddr:  ethContractAddrToBscContractAddr,
-		newSwapPairSignal:     make(chan ethcom.Address),
-		ethSwapAgentAbi:       &ethSwapAgentAbi,
-		bscSwapAgentABi:       &bscSwapAgentAbi,
-		ethSwapAgent:          ethcom.HexToAddress(cfg.ChainConfig.ETHSwapAgentAddr),
-		bscSwapAgent:          ethcom.HexToAddress(cfg.ChainConfig.BSCSwapAgentAddr),
+		db:                     db,
+		config:                 cfg,
+		hmacCKey:               keyConfig.HMACKey,
+		tssClientSecureConfig:  NewClientSecureConfig(keyConfig),
+		bscClient:              bscClient,
+		ethClient:              ethClient,
+		bscChainID:             bscChainID.Int64(),
+		ethChainID:             ethChainID.Int64(),
+		bscTxSender:            ethcom.HexToAddress(cfg.KeyManagerConfig.BSCAccountAddr),
+		ethTxSender:            ethcom.HexToAddress(cfg.KeyManagerConfig.ETHAccountAddr),
+		swapPairsFromBEP20Addr: swapPairInstances,
+		bep20ToERC20:           bscContractAddrToEthContractAddr,
+		erc20ToBEP20:           ethContractAddrToBscContractAddr,
+		newSwapPairSignal:      make(chan ethcom.Address),
+		ethSwapAgentAbi:        &ethSwapAgentAbi,
+		bscSwapAgentABi:        &bscSwapAgentAbi,
+		ethSwapAgent:           ethcom.HexToAddress(cfg.ChainConfig.ETHSwapAgentAddr),
+		bscSwapAgent:           ethcom.HexToAddress(cfg.ChainConfig.BSCSwapAgentAddr),
 	}
 
 	return swapEngine, nil
@@ -135,7 +135,7 @@ func (engine *SwapEngine) monitorSwapRequestDaemon() {
 
 func (engine *SwapEngine) getSwapHMAC(swap *model.Swap) string {
 	material := fmt.Sprintf("%s#%s#%s#%s#%s#%s#%d#%s#%s#%s#%s",
-		swap.Status, swap.Sponsor, swap.BscContractAddr, swap.EThContractAddr, swap.Symbol, swap.Amount, swap.Decimals, swap.Direction, swap.StartTxHash, swap.FillTxHash, swap.RefundTxHash)
+		swap.Status, swap.Sponsor, swap.BEP20Addr, swap.ERC20Addr, swap.Symbol, swap.Amount, swap.Decimals, swap.Direction, swap.StartTxHash, swap.FillTxHash, swap.RefundTxHash)
 	mac := hmac.New(sha256.New, []byte(engine.hmacCKey))
 	mac.Write([]byte(material))
 
@@ -163,27 +163,27 @@ func (engine *SwapEngine) createSwap(txEventLog *model.SwapStartTxLog) *model.Sw
 		swapDirection = SwapBSC2Eth
 	}
 
-	var bscContractAddr ethcom.Address
-	var ethContractAddr ethcom.Address
+	var bep20Addr ethcom.Address
+	var erc20Addr ethcom.Address
 	var ok bool
 	decimals := 0
 	var symbol string
 	swapStatus := SwapQuoteRejected
 	err := func() error {
 		if txEventLog.Chain == common.ChainETH {
-			ethContractAddr = ethcom.HexToAddress(txEventLog.ContractAddress)
-			if bscContractAddr, ok = engine.ethToBscContractAddr[ethcom.HexToAddress(txEventLog.ContractAddress)]; !ok {
-				return fmt.Errorf("unsupported eth token contract address: %s", txEventLog.ContractAddress)
+			erc20Addr = ethcom.HexToAddress(txEventLog.TokenAddr)
+			if bep20Addr, ok = engine.erc20ToBEP20[ethcom.HexToAddress(txEventLog.TokenAddr)]; !ok {
+				return fmt.Errorf("unsupported eth token contract address: %s", txEventLog.TokenAddr)
 			}
 		} else {
-			bscContractAddr = ethcom.HexToAddress(txEventLog.ContractAddress)
-			if ethContractAddr, ok = engine.bscToEthContractAddr[ethcom.HexToAddress(txEventLog.ContractAddress)]; !ok {
-				return fmt.Errorf("unsupported bsc token contract address: %s", txEventLog.ContractAddress)
+			bep20Addr = ethcom.HexToAddress(txEventLog.TokenAddr)
+			if erc20Addr, ok = engine.bep20ToERC20[ethcom.HexToAddress(txEventLog.TokenAddr)]; !ok {
+				return fmt.Errorf("unsupported bsc token contract address: %s", txEventLog.TokenAddr)
 			}
 		}
-		pairInstance, ok := engine.swapPairs[bscContractAddr]
+		pairInstance, ok := engine.swapPairsFromBEP20Addr[bep20Addr]
 		if !ok {
-			return fmt.Errorf("unsupported swap pair %s", bscContractAddr.String())
+			return fmt.Errorf("unsupported swap pair %s", bep20Addr.String())
 		}
 		decimals = pairInstance.Decimals
 		symbol = pairInstance.Symbol
@@ -206,17 +206,17 @@ func (engine *SwapEngine) createSwap(txEventLog *model.SwapStartTxLog) *model.Sw
 	}
 
 	swap := &model.Swap{
-		Status:          swapStatus,
-		Sponsor:         sponsor,
-		BscContractAddr: bscContractAddr.String(),
-		EThContractAddr: ethContractAddr.String(),
-		Symbol:          symbol,
-		Amount:          amount,
-		Decimals:        decimals,
-		Direction:       swapDirection,
-		StartTxHash:     swapStartTxHash,
-		FillTxHash:      "",
-		Log:             log,
+		Status:      swapStatus,
+		Sponsor:     sponsor,
+		BEP20Addr:   bep20Addr.String(),
+		ERC20Addr:   erc20Addr.String(),
+		Symbol:      symbol,
+		Amount:      amount,
+		Decimals:    decimals,
+		Direction:   swapDirection,
+		StartTxHash: swapStartTxHash,
+		FillTxHash:  "",
+		Log:         log,
 	}
 
 	return swap
@@ -284,7 +284,7 @@ func (engine *SwapEngine) updateSwap(tx *gorm.DB, swap *model.Swap) {
 
 func (engine *SwapEngine) createSwapDaemon() {
 	// start initial swap pair daemon
-	for _, swapPairInstance := range engine.swapPairs {
+	for _, swapPairInstance := range engine.swapPairsFromBEP20Addr {
 		go engine.swapInstanceDaemon(SwapEth2BSC, swapPairInstance)
 		go engine.swapInstanceDaemon(SwapBSC2Eth, swapPairInstance)
 	}
@@ -295,7 +295,7 @@ func (engine *SwapEngine) createSwapDaemon() {
 			defer engine.mutex.RUnlock()
 
 			util.Logger.Infof("start new swap daemon for %s", bscContractAddr.String())
-			tokenInstance, ok := engine.swapPairs[bscContractAddr]
+			tokenInstance, ok := engine.swapPairsFromBEP20Addr[bscContractAddr]
 			if !ok {
 				util.Logger.Errorf("unexpected error, can't find token install for bsc contract %s", bscContractAddr)
 				util.SendTelegramMessage(fmt.Sprintf("unexpected error, can't find token install for bsc contract %s", bscContractAddr))
@@ -309,13 +309,13 @@ func (engine *SwapEngine) createSwapDaemon() {
 }
 
 func (engine *SwapEngine) swapInstanceDaemon(direction common.SwapDirection, swapPairInstance *SwapPairIns) {
-	bep20Addr := swapPairInstance.BSCTokenContractAddr
-	erc20Addr := swapPairInstance.ETHTokenContractAddr
+	bep20Addr := swapPairInstance.BEP20Addr
+	erc20Addr := swapPairInstance.ERC20Addr
 	util.Logger.Infof("start swap daemon, direction %s, symbol: %s, bep20 token %s, erc20 token %s", direction, swapPairInstance.Symbol, bep20Addr.String(), erc20Addr.String())
 	for {
 
 		swaps := make([]model.Swap, 0)
-		engine.db.Where("status in (?) and bsc_contract_addr = ? and direction = ?", []common.SwapStatus{SwapConfirmed, SwapSending}, bep20Addr.String(), direction).Order("id asc").Limit(BatchSize).Find(&swaps)
+		engine.db.Where("status in (?) and bep20_addr = ? and erc20_addr = ? and direction = ?", []common.SwapStatus{SwapConfirmed, SwapSending}, bep20Addr.String(), erc20Addr.String(), direction).Order("id asc").Limit(BatchSize).Find(&swaps)
 
 		if len(swaps) == 0 {
 			time.Sleep(SwapSleepSecond * time.Second)
@@ -444,7 +444,7 @@ func (engine *SwapEngine) doSwap(swap *model.Swap, swapPairInstance *SwapPairIns
 	if swap.Direction == SwapEth2BSC {
 		bscClientMutex.Lock()
 		defer bscClientMutex.Unlock()
-		data, err := abiEncodeFillETH2BSCSwap(ethcom.HexToHash(swap.StartTxHash), swapPairInstance.ETHTokenContractAddr, ethcom.HexToAddress(swap.Sponsor), amount, engine.bscSwapAgentABi)
+		data, err := abiEncodeFillETH2BSCSwap(ethcom.HexToHash(swap.StartTxHash), swapPairInstance.ERC20Addr, ethcom.HexToAddress(swap.Sponsor), amount, engine.bscSwapAgentABi)
 		if err != nil {
 			return nil, err
 		}
@@ -473,7 +473,7 @@ func (engine *SwapEngine) doSwap(swap *model.Swap, swapPairInstance *SwapPairIns
 	} else {
 		ethClientMutex.Lock()
 		defer ethClientMutex.Unlock()
-		data, err := abiEncodeFillBSC2ETHSwap(ethcom.HexToHash(swap.StartTxHash), swapPairInstance.ETHTokenContractAddr, ethcom.HexToAddress(swap.Sponsor), amount, engine.ethSwapAgentAbi)
+		data, err := abiEncodeFillBSC2ETHSwap(ethcom.HexToHash(swap.StartTxHash), swapPairInstance.ERC20Addr, ethcom.HexToAddress(swap.Sponsor), amount, engine.ethSwapAgentAbi)
 		signedTx, err := buildSignedTransaction(common.ChainETH, engine.ethTxSender, engine.ethSwapAgent, engine.ethClient, data, engine.tssClientSecureConfig, engine.config.KeyManagerConfig.Endpoint)
 		if err != nil {
 			return nil, err
@@ -718,19 +718,19 @@ func (engine *SwapEngine) AddSwapPairInstance(swapPair *model.SwapPair) error {
 
 	engine.mutex.Lock()
 	defer engine.mutex.Unlock()
-	engine.swapPairs[ethcom.HexToAddress(swapPair.BSCTokenContractAddr)] = &SwapPairIns{
-		Symbol:               swapPair.Symbol,
-		Name:                 swapPair.Name,
-		Decimals:             swapPair.Decimals,
-		LowBound:             lowBound,
-		UpperBound:           upperBound,
-		BSCTokenContractAddr: ethcom.HexToAddress(swapPair.BSCTokenContractAddr),
-		ETHTokenContractAddr: ethcom.HexToAddress(swapPair.ETHTokenContractAddr),
+	engine.swapPairsFromBEP20Addr[ethcom.HexToAddress(swapPair.BEP20Addr)] = &SwapPairIns{
+		Symbol:     swapPair.Symbol,
+		Name:       swapPair.Name,
+		Decimals:   swapPair.Decimals,
+		LowBound:   lowBound,
+		UpperBound: upperBound,
+		BEP20Addr:  ethcom.HexToAddress(swapPair.BEP20Addr),
+		ERC20Addr:  ethcom.HexToAddress(swapPair.ERC20Addr),
 	}
-	engine.bscToEthContractAddr[ethcom.HexToAddress(swapPair.BSCTokenContractAddr)] = ethcom.HexToAddress(swapPair.ETHTokenContractAddr)
-	engine.ethToBscContractAddr[ethcom.HexToAddress(swapPair.ETHTokenContractAddr)] = ethcom.HexToAddress(swapPair.BSCTokenContractAddr)
+	engine.bep20ToERC20[ethcom.HexToAddress(swapPair.BEP20Addr)] = ethcom.HexToAddress(swapPair.ERC20Addr)
+	engine.erc20ToBEP20[ethcom.HexToAddress(swapPair.ERC20Addr)] = ethcom.HexToAddress(swapPair.BEP20Addr)
 
-	engine.newSwapPairSignal <- ethcom.HexToAddress(swapPair.BSCTokenContractAddr)
+	engine.newSwapPairSignal <- ethcom.HexToAddress(swapPair.BEP20Addr)
 	return nil
 }
 
@@ -738,7 +738,7 @@ func (engine *SwapEngine) GetSwapPairInstance(bscTokenAddr ethcom.Address) *Swap
 	engine.mutex.RLock()
 	defer engine.mutex.RUnlock()
 
-	tokenInstance, ok := engine.swapPairs[bscTokenAddr]
+	tokenInstance, ok := engine.swapPairsFromBEP20Addr[bscTokenAddr]
 	if !ok {
 		return nil
 	}
@@ -749,8 +749,8 @@ func (engine *SwapEngine) UpdateSwapInstance(swapPair *model.SwapPair) {
 	engine.mutex.Lock()
 	defer engine.mutex.Unlock()
 
-	bscTokenAddr := ethcom.HexToAddress(swapPair.BSCTokenContractAddr)
-	tokenInstance, ok := engine.swapPairs[bscTokenAddr]
+	bscTokenAddr := ethcom.HexToAddress(swapPair.BEP20Addr)
+	tokenInstance, ok := engine.swapPairsFromBEP20Addr[bscTokenAddr]
 	if !ok {
 		return
 	}
@@ -763,5 +763,5 @@ func (engine *SwapEngine) UpdateSwapInstance(swapPair *model.SwapPair) {
 	_, ok = upperBound.SetString(swapPair.LowBound, 10)
 	tokenInstance.LowBound = lowBound
 
-	engine.swapPairs[bscTokenAddr] = tokenInstance
+	engine.swapPairsFromBEP20Addr[bscTokenAddr] = tokenInstance
 }

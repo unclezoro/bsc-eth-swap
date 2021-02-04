@@ -10,16 +10,16 @@ import (
 
 type SwapPair struct {
 	gorm.Model
-	Sponsor              string `gorm:"not null;index:sponsor"`
-	Symbol               string `gorm:"not null;index:symbol"`
-	Name                 string `gorm:"not null"`
-	Decimals             int    `gorm:"not null"`
-	BSCTokenContractAddr string `gorm:"not null"`
-	ETHTokenContractAddr string `gorm:"not null"`
-	Available            bool   `gorm:"not null;index:available"`
-	LowBound             string `gorm:"not null"`
-	UpperBound           string `gorm:"not null"`
-	IconUrl              string
+	Sponsor    string `gorm:"not null;index:sponsor"`
+	Symbol     string `gorm:"not null;index:symbol"`
+	Name       string `gorm:"not null"`
+	Decimals   int    `gorm:"not null"`
+	BEP20Addr  string `gorm:"not null"`
+	ERC20Addr  string `gorm:"not null"`
+	Available  bool   `gorm:"not null;index:available"`
+	LowBound   string `gorm:"not null"`
+	UpperBound string `gorm:"not null"`
+	IconUrl    string
 
 	RecordHash string `gorm:"not null"`
 }
@@ -32,11 +32,11 @@ type SwapPairRegisterTxLog struct {
 	Id    int64
 	Chain string `gorm:"not null;index:swappair_register_tx_log_chain"`
 
-	Sponsor              string `gorm:"not null"`
-	ETHTokenContractAddr string `gorm:"not null"`
-	Symbol               string `gorm:"not null;index:swappair_register_tx_log_symbol"`
-	Name                 string `gorm:"not null"`
-	Decimals             int    `gorm:"not null"`
+	Sponsor   string `gorm:"not null"`
+	ERC20Addr string `gorm:"not null"`
+	Symbol    string `gorm:"not null;index:swappair_register_tx_log_symbol"`
+	Name      string `gorm:"not null"`
+	Decimals  int    `gorm:"not null"`
 
 	Status       TxStatus `gorm:"not null;index:swappair_register_tx_log_status"`
 	TxHash       string   `gorm:"not null;index:swappair_register_tx_log_tx_hash"`
@@ -66,7 +66,7 @@ type SwapPairCreatTx struct {
 	SwapPairRegisterTxHash string `gorm:"unique;not null"`
 	SwapPairCreatTxHash    string `gorm:"unique;not null"`
 
-	ETHTokenContractAddr string `gorm:"not null"`
+	ERC20Addr string `gorm:"not null"`
 
 	Symbol   string `gorm:"not null;index:swap_pair_creat_tx_symbol"`
 	Name     string `gorm:"not null"`
@@ -88,8 +88,8 @@ type SwapPairStateMachine struct {
 
 	Status common.SwapPairStatus `gorm:"not null;index:swap_pair_sm_status"`
 
-	ETHTokenContractAddr string `gorm:"not null"`
-	BSCTokenContractAddr string
+	ERC20Addr string `gorm:"not null"`
+	BEP20Addr string
 
 	Sponsor  string `gorm:"not null"`
 	Symbol   string `gorm:"not null;index:swap_pair_sm_symbol"`
