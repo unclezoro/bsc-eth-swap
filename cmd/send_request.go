@@ -110,5 +110,5 @@ func main() {
 		println(fmt.Sprintf("get response body error, err=%s", err.Error()))
 		return
 	}
-	fmt.Printf("Response: \n%s", string(resBody))
+	fmt.Printf("Response: %s\n", string(resBody))
 }

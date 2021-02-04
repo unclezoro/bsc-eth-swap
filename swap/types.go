@@ -67,8 +67,8 @@ type SwapEngine struct {
 	erc20ToBEP20           map[ethcom.Address]ethcom.Address
 	newSwapPairSignal      chan ethcom.Address
 
-	ethSwapAgentAbi *abi.ABI
-	bscSwapAgentABi *abi.ABI
+	ethSwapAgentABI *abi.ABI
+	bscSwapAgentABI *abi.ABI
 
 	ethSwapAgent ethcom.Address
 	bscSwapAgent ethcom.Address

@@ -95,6 +95,14 @@ func abiEncodeFillETH2BSCSwap(ethTxHash ethcom.Hash, erc20Addr ethcom.Address, t
 	return data, nil
 }
 
+func abiEncodeERC20Transfer(recipient ethcom.Address, amount *big.Int, abi *abi.ABI) ([]byte, error) {
+	data, err := abi.Pack("transfer", recipient, amount)
+	if err != nil {
+		return nil, err
+	}
+	return data, nil
+}
+
 func abiEncodeFillBSC2ETHSwap(ethTxHash ethcom.Hash, erc20Addr ethcom.Address, toAddress ethcom.Address, amount *big.Int, abi *abi.ABI) ([]byte, error) {
 	data, err := abi.Pack("fillBSC2ETHSwap", ethTxHash, erc20Addr, toAddress, amount)
 	if err != nil {
@@ -257,6 +265,51 @@ func buildSignedTransaction(network string, txSender, contract ethcom.Address, e
 	} else {
 		signedRawTx, err = signETH(tssConfig, endpoint, txSender.String(),
 			contract.String(), "0", "", "", chainId.Int64(), int64(nonce), "0x"+strconv.FormatInt(gasPrice.Int64(), 16), "0x"+strconv.FormatInt(int64(gasLimit), 16), txInput, true)
+		if err != nil {
+			return nil, fmt.Errorf("TSS server failure: %v", err)
+		}
+	}
+
+	var signedTx types.Transaction
+	err = rlp.DecodeBytes(ethcom.FromHex(signedRawTx.RawTransaction), &signedTx)
+	if err != nil {
+		return nil, fmt.Errorf("failed to decode TSS signed result: %v", err)
+	}
+
+	return &signedTx, nil
+}
+
+func buildNativeCoinTransferTx(network string, txSender, recipient ethcom.Address, amount *big.Int, ethClient *ethclient.Client, tssConfig *tsssdksecure.ClientSecureConfig, endpoint string) (*types.Transaction, error) {
+	nonce, err := ethClient.PendingNonceAt(context.Background(), txSender)
+	if err != nil {
+		return nil, err
+	}
+	gasPrice, err := ethClient.SuggestGasPrice(context.Background())
+	if err != nil {
+		return nil, err
+	}
+	msg := ethereum.CallMsg{From: txSender, To: &recipient, GasPrice: gasPrice, Value: amount}
+	gasLimit, err := ethClient.EstimateGas(context.Background(), msg)
+	if err != nil {
+		return nil, fmt.Errorf("failed to estimate gas needed: %v", err)
+	}
+	gasLimit = gasLimit * 2
+
+	chainId, err := ethClient.ChainID(context.Background())
+	if err != nil {
+		return nil, fmt.Errorf("failed to get chainid: %v", err)
+	}
+
+	var signedRawTx *tsssdktypes.SignResponse
+	if network == common.ChainBSC {
+		signedRawTx, err = signBSC(tssConfig, endpoint, txSender.String(),
+			recipient.String(), amount.String(), "BNB", "", chainId.Int64(), int64(nonce), "0x"+strconv.FormatInt(gasPrice.Int64(), 16), "0x"+strconv.FormatInt(int64(gasLimit), 16), nil, true)
+		if err != nil {
+			return nil, fmt.Errorf("TSS server failure: %v", err)
+		}
+	} else {
+		signedRawTx, err = signETH(tssConfig, endpoint, txSender.String(),
+			recipient.String(), amount.String(), "ETH", "", chainId.Int64(), int64(nonce), "0x"+strconv.FormatInt(gasPrice.Int64(), 16), "0x"+strconv.FormatInt(int64(gasLimit), 16), nil, true)
 		if err != nil {
 			return nil, fmt.Errorf("TSS server failure: %v", err)
 		}

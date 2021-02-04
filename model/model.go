@@ -53,4 +53,5 @@ func InitTables(db *gorm.DB) {
 	db.AutoMigrate(&SwapPairCreatTx{})
 	db.AutoMigrate(&SwapPairRegisterTxLog{})
 	db.AutoMigrate(&SwapPairStateMachine{})
+	db.AutoMigrate(&RetrySwap{})
 }

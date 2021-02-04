@@ -56,6 +56,28 @@ func (SwapFillTx) TableName() string {
 	return "swap_fill_txs"
 }
 
+type RetrySwap struct {
+	gorm.Model
+
+	Direction   common.SwapDirection `gorm:"not null"`
+	StartTxHash string               `gorm:"not null;index:retry_swap_start_tx_hash"`
+	FillTxHash  string               `gorm:"not null"`
+	Sponsor     string               `gorm:"not null;index:retry_swap_sponsor"`
+	BEP20Addr   string               `gorm:"not null;index:retry_swap_bep20_addr"`
+	ERC20Addr   string               `gorm:"not null;index:retry_swap_erc20_addr"`
+	Symbol      string               `gorm:"not null"`
+	Amount      string               `gorm:"not null"`
+	Decimals    int                  `gorm:"not null"`
+
+	Done                bool   `gorm:"not null"`
+	RetryFillSwapTxHash string `gorm:"not null"`
+	ErrorMsg            string `gorm:"not null"`
+}
+
+func (RetrySwap) TableName() string {
+	return "retry_swaps"
+}
+
 type Swap struct {
 	gorm.Model
 
@@ -74,9 +96,6 @@ type Swap struct {
 	StartTxHash string `gorm:"not null;index:swap_start_tx_hash"`
 	// The tx hash confirmed withdraw
 	FillTxHash string `gorm:"not null;index:swap_fill_tx_hash"`
-
-	// The tx hash of refund
-	RefundTxHash string
 
 	// used to log more message about how this swap failed or invalid
 	Log string

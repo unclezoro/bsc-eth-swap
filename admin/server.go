@@ -6,6 +6,7 @@ import (
 	"io/ioutil"
 	"math/big"
 	"net/http"
+	"strings"
 	"time"
 
 	"github.com/ethereum/go-ethereum/common"
@@ -15,6 +16,7 @@ import (
 	"github.com/binance-chain/bsc-eth-swap/model"
 	"github.com/binance-chain/bsc-eth-swap/swap"
 	"github.com/binance-chain/bsc-eth-swap/util"
+	cmm "github.com/binance-chain/bsc-eth-swap/common"
 )
 
 const (
@@ -41,19 +43,8 @@ func NewAdmin(config *util.Config, db *gorm.DB, signer *util.HmacSigner, swapEng
 	}
 }
 
-type updateSwapPairRequest struct {
-	BSCTokenContractAddr string `json:"bsc_token_contract_addr"`
-
-	Available bool `json:"available"`
-
-	LowerBound string `json:"lower_bound"`
-	UpperBound string `json:"upper_bound"`
-
-	IconUrl string `json:"icon_url"`
-}
-
 func updateCheck(update *updateSwapPairRequest) error {
-	if update.BSCTokenContractAddr == "" {
+	if update.BEP20Addr == "" {
 		return fmt.Errorf("bsc_token_contract_addr can't be empty")
 	}
 	if update.UpperBound != "" {
@@ -73,17 +64,9 @@ func updateCheck(update *updateSwapPairRequest) error {
 }
 
 func (admin *Admin) UpdateSwapPairHandler(w http.ResponseWriter, r *http.Request) {
-	apiKey := r.Header.Get("ApiKey")
-	auth := r.Header.Get("Authorization")
-
-	reqBody, err := ioutil.ReadAll(r.Body)
+	reqBody, err := admin.checkAuth(r)
 	if err != nil {
 		http.Error(w, err.Error(), http.StatusBadRequest)
-		return
-	}
-
-	if !admin.checkAuth(apiKey, reqBody, auth) {
-		http.Error(w, "auth is not correct", http.StatusUnauthorized)
 		return
 	}
 
@@ -100,9 +83,9 @@ func (admin *Admin) UpdateSwapPairHandler(w http.ResponseWriter, r *http.Request
 	}
 
 	swapPair := model.SwapPair{}
-	err = admin.DB.Where("bsc_token_contract_addr = ?", updateSwapPair.BSCTokenContractAddr).First(&swapPair).Error
+	err = admin.DB.Where("bep20_addr = ?", updateSwapPair.BEP20Addr).First(&swapPair).Error
 	if err != nil {
-		http.Error(w, fmt.Sprintf("swapPair %s is not found", updateSwapPair.BSCTokenContractAddr), http.StatusBadRequest)
+		http.Error(w, fmt.Sprintf("swapPair %s is not found", updateSwapPair.BEP20Addr), http.StatusBadRequest)
 		return
 	}
 
@@ -120,7 +103,7 @@ func (admin *Admin) UpdateSwapPairHandler(w http.ResponseWriter, r *http.Request
 		toUpdate["icon_url"] = updateSwapPair.IconUrl
 	}
 
-	err = admin.DB.Model(model.SwapPair{}).Where("bsc_token_contract_addr = ?", updateSwapPair.BSCTokenContractAddr).Updates(toUpdate).Error
+	err = admin.DB.Model(model.SwapPair{}).Where("bep20_addr = ?", updateSwapPair.BEP20Addr).Updates(toUpdate).Error
 	if err != nil {
 		http.Error(w, fmt.Sprintf("update swapPair error, err=%s", err.Error()), http.StatusInternalServerError)
 		return
@@ -128,16 +111,16 @@ func (admin *Admin) UpdateSwapPairHandler(w http.ResponseWriter, r *http.Request
 
 	// get swapPair
 	swapPair = model.SwapPair{}
-	err = admin.DB.Where("bsc_token_contract_addr = ?", updateSwapPair.BSCTokenContractAddr).First(&swapPair).Error
+	err = admin.DB.Where("bep20_addr = ?", updateSwapPair.BEP20Addr).First(&swapPair).Error
 	if err != nil {
-		http.Error(w, fmt.Sprintf("swapPair %s is not found", updateSwapPair.BSCTokenContractAddr), http.StatusBadRequest)
+		http.Error(w, fmt.Sprintf("swapPair %s is not found", updateSwapPair.BEP20Addr), http.StatusBadRequest)
 		return
 	}
 
-	swapPairIns := admin.swapEngine.GetSwapPairInstance(common.HexToAddress(updateSwapPair.BSCTokenContractAddr))
+	swapPairIns := admin.swapEngine.GetSwapPairInstance(common.HexToAddress(updateSwapPair.BEP20Addr))
 	// disable is only for frontend, do not affect backend
 	// if we want to disable it in backend, set the low_bound and upper_bound to be zero
-	if swapPairIns == nil {
+	if swapPairIns == nil && updateSwapPair.Available {
 		// add swapPair in swapper
 		err = admin.swapEngine.AddSwapPairInstance(&swapPair)
 		if err != nil {
@@ -187,16 +170,127 @@ func (admin *Admin) Endpoints(w http.ResponseWriter, r *http.Request) {
 	}
 }
 
+func (admin *Admin) WithdrawToken(w http.ResponseWriter, r *http.Request) {
+	reqBody, err := admin.checkAuth(r)
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusBadRequest)
+		return
+	}
+
+	var withdrawToken withdrawTokenRequest
+	err = json.Unmarshal(reqBody, &withdrawToken)
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusBadRequest)
+		return
+	}
+
+	if err = withdrawCheck(&withdrawToken); err != nil {
+		http.Error(w, err.Error(), http.StatusBadRequest)
+		return
+	}
+
+	amount := big.NewInt(0)
+	amount.SetString(withdrawToken.Amount, 10)
+
+	var withdrawResp withdrawTokenResponse
+	withdrawResp.TxHash, err = admin.swapEngine.WithdrawToken(withdrawToken.Chain,
+		common.HexToAddress(withdrawToken.TokenAddr),
+		common.HexToAddress(withdrawToken.Recipient), amount)
+	if err != nil {
+		withdrawResp.ErrMsg = err.Error()
+	}
+
+	jsonBytes, err := json.MarshalIndent(withdrawResp, "", "    ")
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(http.StatusOK)
+	_, err = w.Write(jsonBytes)
+	if err != nil {
+		util.Logger.Errorf("write response error, err=%s", err.Error())
+	}
+
+}
+
+func withdrawCheck(withdraw *withdrawTokenRequest) error {
+	if strings.ToUpper(withdraw.Chain) != cmm.ChainBSC && strings.ToUpper(withdraw.Chain) != cmm.ChainETH {
+		return fmt.Errorf("bsc_token_contract_addr can't be empty")
+	}
+	if !common.IsHexAddress(withdraw.TokenAddr) {
+		return fmt.Errorf("token address is not a valid address")
+	}
+	if !common.IsHexAddress(withdraw.Recipient) {
+		return fmt.Errorf("recipient is not a valid address")
+	}
+	_, ok := big.NewInt(0).SetString(withdraw.Amount, 10)
+	if !ok {
+		return fmt.Errorf("invalid input, expected big integer")
+	}
+	return nil
+}
+
+func (admin *Admin) RetryFailedSwaps(w http.ResponseWriter, r *http.Request) {
+	reqBody, err := admin.checkAuth(r)
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusBadRequest)
+		return
+	}
+
+	var retryFailedSwaps retryFailedSwapsRequest
+	err = json.Unmarshal(reqBody, &retryFailedSwaps)
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusBadRequest)
+		return
+	}
+
+	var retryFailedSwapsResp retryFailedSwapsResponse
+	retryFailedSwapsResp.SwapIDList = retryFailedSwaps.SwapIDList
+	err = admin.swapEngine.InsertRetryFailedSwaps(retryFailedSwaps.SwapIDList)
+	if err != nil {
+		w.WriteHeader(http.StatusInternalServerError)
+		retryFailedSwapsResp.ErrMsg = err.Error()
+	} else {
+		w.WriteHeader(http.StatusOK)
+	}
+
+	jsonBytes, err := json.MarshalIndent(retryFailedSwapsResp, "", "    ")
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+
+	w.Header().Set("Content-Type", "application/json")
+
+	_, err = w.Write(jsonBytes)
+	if err != nil {
+		util.Logger.Errorf("write response error, err=%s", err.Error())
+	}
+}
+
 func (admin *Admin) Healthz(w http.ResponseWriter, r *http.Request) {
 	w.WriteHeader(http.StatusOK)
 }
 
-func (admin *Admin) checkAuth(apiKey string, payload []byte, hash string) bool {
-	if admin.hmacSigner.ApiKey != apiKey {
-		return false
+func (admin *Admin) checkAuth(r *http.Request) ([]byte, error) {
+	apiKey := r.Header.Get("ApiKey")
+	hash := r.Header.Get("Authorization")
+
+	payload, err := ioutil.ReadAll(r.Body)
+	if err != nil {
+		return nil, err
 	}
 
-	return admin.hmacSigner.Verify(payload, hash)
+	if admin.hmacSigner.ApiKey != apiKey {
+		return nil, fmt.Errorf("api key mismatch")
+	}
+
+	if !admin.hmacSigner.Verify(payload, hash) {
+		return nil, fmt.Errorf("invalud auth")
+	}
+	return payload, nil
 }
 
 func (admin *Admin) Serve() {
@@ -205,6 +299,8 @@ func (admin *Admin) Serve() {
 	router.HandleFunc("/", admin.Endpoints).Methods("GET")
 	router.HandleFunc("/healthz", admin.Healthz).Methods("GET")
 	router.HandleFunc("/update_swap_pair", admin.UpdateSwapPairHandler).Methods("PUT")
+	router.HandleFunc("/withdraw_token", admin.WithdrawToken).Methods("POST")
+	router.HandleFunc("/retry_failed_swaps", admin.RetryFailedSwaps).Methods("POST")
 
 	listenAddr := DefaultListenAddr
 	if admin.cfg.AdminConfig.ListenAddr != "" {
