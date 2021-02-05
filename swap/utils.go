@@ -43,7 +43,7 @@ func buildSwapPairInstance(pairs []model.SwapPair) (map[ethcom.Address]*SwapPair
 			panic(fmt.Sprintf("invalid upperBound amount: %s", pair.LowBound))
 		}
 
-		swapPairInstances[ethcom.HexToAddress(pair.BEP20Addr)] = &SwapPairIns{
+		swapPairInstances[ethcom.HexToAddress(pair.ERC20Addr)] = &SwapPairIns{
 			Symbol:     pair.Symbol,
 			Name:       pair.Name,
 			Decimals:   pair.Decimals,
@@ -52,6 +52,8 @@ func buildSwapPairInstance(pairs []model.SwapPair) (map[ethcom.Address]*SwapPair
 			BEP20Addr:  ethcom.HexToAddress(pair.BEP20Addr),
 			ERC20Addr:  ethcom.HexToAddress(pair.ERC20Addr),
 		}
+
+		util.Logger.Infof("Load swap pair, bep20 address %s, erc20 address %s", pair.BEP20Addr, pair.ERC20Addr)
 	}
 
 	return swapPairInstances, nil

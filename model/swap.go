@@ -71,7 +71,8 @@ type RetrySwap struct {
 	Decimals    int                  `gorm:"not null"`
 
 	RecordHash string `gorm:"not null"`
-	Done       bool   `gorm:"not null"`
+	ErrorMsg   string
+	Done       bool
 }
 
 func (RetrySwap) TableName() string {
@@ -81,8 +82,8 @@ func (RetrySwap) TableName() string {
 type RetrySwapTx struct {
 	gorm.Model
 
-	SwapID              uint                 `gorm:"not null"`
-	StartTxHash         string               `gorm:"not null;index:retry_swap_start_tx_hash"`
+	SwapID              uint                 `gorm:"not null;index:retry_swap_tx_swap_id"`
+	StartTxHash         string               `gorm:"not null;index:retry_swap_tx_start_tx_hash"`
 	Direction           common.SwapDirection `gorm:"not null"`
 	TrackRetryCounter   int64
 	RetryFillSwapTxHash string            `gorm:"not null"`

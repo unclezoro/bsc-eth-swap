@@ -247,8 +247,7 @@ func (admin *Admin) RetryFailedSwaps(w http.ResponseWriter, r *http.Request) {
 	}
 
 	var retryFailedSwapsResp retryFailedSwapsResponse
-	retryFailedSwapsResp.SwapIDList = retryFailedSwaps.SwapIDList
-	err = admin.swapEngine.InsertRetryFailedSwaps(retryFailedSwaps.SwapIDList)
+	retryFailedSwapsResp.SwapIDList, err = admin.swapEngine.InsertRetryFailedSwaps(retryFailedSwaps.SwapIDList)
 	if err != nil {
 		w.WriteHeader(http.StatusInternalServerError)
 		retryFailedSwapsResp.ErrMsg = err.Error()

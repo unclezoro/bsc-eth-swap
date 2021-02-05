@@ -95,6 +95,7 @@ func (engine *SwapEngine) Start() {
 	go engine.swapInstanceDaemon(SwapBSC2Eth)
 	go engine.trackSwapTxDaemon()
 	go engine.retryFailedSwapsDaemon()
+	go engine.trackRetrySwapTxDaemon()
 }
 
 func (engine *SwapEngine) monitorSwapRequestDaemon() {
@@ -681,6 +682,8 @@ func (engine *SwapEngine) AddSwapPairInstance(swapPair *model.SwapPair) error {
 	}
 	engine.bep20ToERC20[ethcom.HexToAddress(swapPair.BEP20Addr)] = ethcom.HexToAddress(swapPair.ERC20Addr)
 	engine.erc20ToBEP20[ethcom.HexToAddress(swapPair.ERC20Addr)] = ethcom.HexToAddress(swapPair.BEP20Addr)
+
+	util.Logger.Infof("Load swap pair, bep20 address %s, erc20 address %s", swapPair.BEP20Addr, swapPair.ERC20Addr)
 
 	return nil
 }

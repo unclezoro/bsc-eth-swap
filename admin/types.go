@@ -21,10 +21,10 @@ type withdrawTokenResponse struct {
 }
 
 type retryFailedSwapsRequest struct {
-	SwapIDList []int64 `json:"swap_id_list"`
+	SwapIDList []uint `json:"swap_id_list"`
 }
 
 type retryFailedSwapsResponse struct {
-	SwapIDList []int64 `json:"swap_id_list"`
-	ErrMsg string `json:"err_msg"`
+	SwapIDList []uint `json:"swap_id_list"`
+	ErrMsg     string `json:"err_msg"`
 }
