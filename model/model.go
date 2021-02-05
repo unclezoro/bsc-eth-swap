@@ -9,6 +9,7 @@ import (
 type TxPhase int
 type TxStatus int
 type FillTxStatus int
+type FillRetryTxStatus int
 
 const (
 	SeenRequest    TxPhase = 0
@@ -23,6 +24,12 @@ const (
 	FillTxSuccess FillTxStatus = 2
 	FillTxFailed  FillTxStatus = 3
 	FillTxMissing FillTxStatus = 4
+
+	FillRetryTxCreated FillRetryTxStatus = 0
+	FillRetryTxSent    FillRetryTxStatus = 1
+	FillRetryTxSuccess FillRetryTxStatus = 2
+	FillRetryTxFailed  FillRetryTxStatus = 3
+	FillRetryTxMissing FillRetryTxStatus = 4
 )
 
 type BlockLog struct {
@@ -54,4 +61,5 @@ func InitTables(db *gorm.DB) {
 	db.AutoMigrate(&SwapPairRegisterTxLog{})
 	db.AutoMigrate(&SwapPairStateMachine{})
 	db.AutoMigrate(&RetrySwap{})
+	db.AutoMigrate(&RetrySwapTx{})
 }

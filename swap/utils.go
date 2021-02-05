@@ -2,22 +2,18 @@ package swap
 
 import (
 	"context"
-	"crypto/ecdsa"
 	"encoding/base64"
 	"encoding/hex"
 	"encoding/json"
 	"fmt"
-	"math/big"
-	"strconv"
-	"strings"
-
 	"github.com/ethereum/go-ethereum"
 	"github.com/ethereum/go-ethereum/accounts/abi"
 	ethcom "github.com/ethereum/go-ethereum/common"
 	"github.com/ethereum/go-ethereum/core/types"
-	"github.com/ethereum/go-ethereum/crypto"
 	"github.com/ethereum/go-ethereum/ethclient"
 	"github.com/ethereum/go-ethereum/rlp"
+	"math/big"
+	"strconv"
 
 	"github.com/binance-chain/tss-crypto-toolkit/ec"
 	rsaTool "github.com/binance-chain/tss-crypto-toolkit/rsa"
@@ -117,25 +113,6 @@ func abiEncodeCreateSwapPair(registerTxHash ethcom.Hash, erc20Addr ethcom.Addres
 		return nil, err
 	}
 	return data, nil
-}
-
-func GetAddress(pubKey *ecdsa.PublicKey) ethcom.Address {
-	return crypto.PubkeyToAddress(*pubKey)
-}
-
-func BuildKeys(privateKeyStr string) (*ecdsa.PrivateKey, *ecdsa.PublicKey, error) {
-	if strings.HasPrefix(privateKeyStr, "0x") {
-		privateKeyStr = privateKeyStr[2:]
-	}
-	priKey, err := crypto.HexToECDSA(privateKeyStr)
-	if err != nil {
-		return nil, nil, err
-	}
-	publicKey, ok := priKey.Public().(*ecdsa.PublicKey)
-	if !ok {
-		return nil, nil, fmt.Errorf("get public key error")
-	}
-	return priKey, publicKey, nil
 }
 
 func NewClientSecureConfig(keyCfg *util.KeyConfig) *tsssdksecure.ClientSecureConfig {
