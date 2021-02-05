@@ -1,7 +1,7 @@
 package admin
 
 type updateSwapPairRequest struct {
-	BEP20Addr  string `json:"bep20_addr"`
+	ERC20Addr  string `json:"erc20_addr"`
 	Available  bool   `json:"available"`
 	LowerBound string `json:"lower_bound"`
 	UpperBound string `json:"upper_bound"`

@@ -21,7 +21,7 @@
   "chain_config": {
     "balance_monitor_interval": 60,
     "bsc_observer_fetch_interval": 1,
-    "bsc_start_height": 5980425,
+    "bsc_start_height": 6009083,
     "bsc_provider": "https://data-seed-prebsc-1-s3.binance.org:8545",
     "bsc_confirm_num": 2,
     "bsc_swap_agent_addr": "0x892916218a197e3C6ce5765E8389FAEE9Beb2219",
@@ -30,7 +30,7 @@
     "bnb_alert_threshold": "1000000000000000000",
     "bsc_wait_milli_sec_between_swaps": 100,
     "eth_observer_fetch_interval": 10,
-    "eth_start_height": 8012058,
+    "eth_start_height": 8017789,
     "eth_provider": "https://rinkeby.infura.io/v3/1c5b38a27f92410cb5feb13b6efb2e14",
     "eth_confirm_num": 1,
     "eth_swap_agent_addr": "0xEBd43f8A3b3f0f2d1734f2547430f6BE6bB43FDF",

@@ -55,7 +55,7 @@ type SwapEngine struct {
 	hmacCKey string
 	config   *util.Config
 	// key is the bsc contract addr
-	swapPairsFromBEP20Addr map[ethcom.Address]*SwapPairIns
+	swapPairsFromERC20Addr map[ethcom.Address]*SwapPairIns
 	tssClientSecureConfig  *tsssdksecure.ClientSecureConfig
 	ethClient              *ethclient.Client
 	bscClient              *ethclient.Client
@@ -65,7 +65,6 @@ type SwapEngine struct {
 	bscTxSender            ethcom.Address
 	bep20ToERC20           map[ethcom.Address]ethcom.Address
 	erc20ToBEP20           map[ethcom.Address]ethcom.Address
-	newSwapPairSignal      chan ethcom.Address
 
 	ethSwapAgentABI *abi.ABI
 	bscSwapAgentABI *abi.ABI

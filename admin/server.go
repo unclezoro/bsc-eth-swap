@@ -44,7 +44,7 @@ func NewAdmin(config *util.Config, db *gorm.DB, signer *util.HmacSigner, swapEng
 }
 
 func updateCheck(update *updateSwapPairRequest) error {
-	if update.BEP20Addr == "" {
+	if update.ERC20Addr == "" {
 		return fmt.Errorf("bsc_token_contract_addr can't be empty")
 	}
 	if update.UpperBound != "" {
@@ -83,9 +83,9 @@ func (admin *Admin) UpdateSwapPairHandler(w http.ResponseWriter, r *http.Request
 	}
 
 	swapPair := model.SwapPair{}
-	err = admin.DB.Where("bep20_addr = ?", updateSwapPair.BEP20Addr).First(&swapPair).Error
+	err = admin.DB.Where("erc20_addr = ?", updateSwapPair.ERC20Addr).First(&swapPair).Error
 	if err != nil {
-		http.Error(w, fmt.Sprintf("swapPair %s is not found", updateSwapPair.BEP20Addr), http.StatusBadRequest)
+		http.Error(w, fmt.Sprintf("swapPair %s is not found", updateSwapPair.ERC20Addr), http.StatusBadRequest)
 		return
 	}
 
@@ -103,7 +103,7 @@ func (admin *Admin) UpdateSwapPairHandler(w http.ResponseWriter, r *http.Request
 		toUpdate["icon_url"] = updateSwapPair.IconUrl
 	}
 
-	err = admin.DB.Model(model.SwapPair{}).Where("bep20_addr = ?", updateSwapPair.BEP20Addr).Updates(toUpdate).Error
+	err = admin.DB.Model(model.SwapPair{}).Where("erc20_addr = ?", updateSwapPair.ERC20Addr).Updates(toUpdate).Error
 	if err != nil {
 		http.Error(w, fmt.Sprintf("update swapPair error, err=%s", err.Error()), http.StatusInternalServerError)
 		return
@@ -111,16 +111,16 @@ func (admin *Admin) UpdateSwapPairHandler(w http.ResponseWriter, r *http.Request
 
 	// get swapPair
 	swapPair = model.SwapPair{}
-	err = admin.DB.Where("bep20_addr = ?", updateSwapPair.BEP20Addr).First(&swapPair).Error
+	err = admin.DB.Where("erc20_addr = ?", updateSwapPair.ERC20Addr).First(&swapPair).Error
 	if err != nil {
-		http.Error(w, fmt.Sprintf("swapPair %s is not found", updateSwapPair.BEP20Addr), http.StatusBadRequest)
+		http.Error(w, fmt.Sprintf("swapPair %s is not found", updateSwapPair.ERC20Addr), http.StatusBadRequest)
 		return
 	}
 
-	swapPairIns := admin.swapEngine.GetSwapPairInstance(common.HexToAddress(updateSwapPair.BEP20Addr))
+	swapPairIns, err := admin.swapEngine.GetSwapPairInstance(common.HexToAddress(updateSwapPair.ERC20Addr))
 	// disable is only for frontend, do not affect backend
 	// if we want to disable it in backend, set the low_bound and upper_bound to be zero
-	if swapPairIns == nil && updateSwapPair.Available {
+	if err != nil && updateSwapPair.Available {
 		// add swapPair in swapper
 		err = admin.swapEngine.AddSwapPairInstance(&swapPair)
 		if err != nil {
