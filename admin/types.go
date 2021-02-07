@@ -25,6 +25,7 @@ type retryFailedSwapsRequest struct {
 }
 
 type retryFailedSwapsResponse struct {
-	SwapIDList []uint `json:"swap_id_list"`
-	ErrMsg     string `json:"err_msg"`
+	SwapIDList         []uint `json:"swap_id_list"`
+	RejectedSwapIDList []uint `json:"rejected_swap_id_list"`
+	ErrMsg             string `json:"err_msg"`
 }

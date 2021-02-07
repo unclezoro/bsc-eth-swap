@@ -53,7 +53,7 @@ func buildSwapPairInstance(pairs []model.SwapPair) (map[ethcom.Address]*SwapPair
 			ERC20Addr:  ethcom.HexToAddress(pair.ERC20Addr),
 		}
 
-		util.Logger.Infof("Load swap pair, bep20 address %s, erc20 address %s", pair.BEP20Addr, pair.ERC20Addr)
+		util.Logger.Infof("Load swap pair, symbol %s, bep20 address %s, erc20 address %s", pair.Symbol, pair.BEP20Addr, pair.ERC20Addr)
 	}
 
 	return swapPairInstances, nil

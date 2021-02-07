@@ -89,6 +89,9 @@ type RetrySwapTx struct {
 	RetryFillSwapTxHash string            `gorm:"not null"`
 	Status              FillRetryTxStatus `gorm:"not null"`
 	ErrorMsg            string            `gorm:"not null"`
+	GasPrice            string
+	ConsumedFeeAmount   string
+	Height              int64
 }
 
 func (RetrySwapTx) TableName() string {

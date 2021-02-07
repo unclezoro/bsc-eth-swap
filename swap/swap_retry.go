@@ -1,13 +1,19 @@
 package swap
 
 import (
+	"bytes"
 	"context"
 	"crypto/hmac"
 	"crypto/sha256"
 	"encoding/hex"
 	"fmt"
 	"math/big"
+	"strings"
 	"time"
+
+	sabi "github.com/binance-chain/bsc-eth-swap/abi"
+	"github.com/ethereum/go-ethereum/accounts/abi"
+	"github.com/ethereum/go-ethereum/core"
 
 	ethcom "github.com/ethereum/go-ethereum/common"
 	"github.com/ethereum/go-ethereum/core/types"
@@ -81,6 +87,7 @@ func (engine *SwapEngine) doRetrySwap(retrySwap *model.RetrySwap, swapPairInstan
 			Direction:           retrySwap.Direction,
 			RetryFillSwapTxHash: signedTx.Hash().String(),
 			Status:              model.FillRetryTxCreated,
+			GasPrice:            signedTx.GasPrice().String(),
 		}
 		err = engine.insertRetrySwapTxsToDB(retrySwapTx)
 		if err != nil {
@@ -106,6 +113,7 @@ func (engine *SwapEngine) doRetrySwap(retrySwap *model.RetrySwap, swapPairInstan
 			StartTxHash:         retrySwap.StartTxHash,
 			Direction:           retrySwap.Direction,
 			RetryFillSwapTxHash: signedTx.Hash().String(),
+			GasPrice:            signedTx.GasPrice().String(),
 		}
 		err = engine.insertRetrySwapTxsToDB(retrySwapTx)
 		if err != nil {
@@ -140,7 +148,7 @@ func (engine *SwapEngine) retryFailedSwapsDaemon() {
 					return fmt.Errorf("failed to get swap instance for erc20 %s, err: %s, skip this swap", retrySwap.ERC20Addr, err.Error())
 				}
 				return nil
-			} ()
+			}()
 			if retryCheckErr != nil {
 				writeDBErr := func() error {
 					tx := engine.db.Begin()
@@ -168,7 +176,28 @@ func (engine *SwapEngine) retryFailedSwapsDaemon() {
 				if err := tx.Error; err != nil {
 					return err
 				}
-				if doRetrySwapErr == nil {
+				if doRetrySwapErr != nil {
+					if doRetrySwapErr.Error() == core.ErrReplaceUnderpriced.Error() {
+						// retry this swap
+						retrySwap.ErrorMsg = doRetrySwapErr.Error()
+						engine.updateRetrySwap(tx, &retrySwap)
+						util.Logger.Infof("Just try again for the retrySwap, start TxHash %s", retrySwap.StartTxHash)
+					} else {
+						util.Logger.Errorf("do retry swap failed: %s, start hash %s", doRetrySwapErr.Error(), retrySwap.StartTxHash)
+						util.SendTelegramMessage(fmt.Sprintf("do retry swap failed: %s, start hash %s", doRetrySwapErr.Error(), retrySwap.StartTxHash))
+
+						retrySwap.Done = true
+						retrySwap.ErrorMsg = doRetrySwapErr.Error()
+						engine.updateRetrySwap(tx, &retrySwap)
+
+						tx.Model(model.RetrySwapTx{}).Where("swap_id = ?", retrySwap.SwapID).Updates(
+							map[string]interface{}{
+								"status":     model.FillRetryTxFailed,
+								"error_msg":  doRetrySwapErr.Error(),
+								"updated_at": time.Now().Unix(),
+							})
+					}
+				} else {
 					tx.Model(model.RetrySwapTx{}).Where("swap_id = ?", retrySwap.SwapID).Updates(
 						map[string]interface{}{
 							"status":     model.FillRetryTxSent,
@@ -240,10 +269,13 @@ func (engine *SwapEngine) trackRetrySwapTxDaemon() {
 				Order("id asc").Limit(TrackSentTxBatchSize).Find(&retrySwapTxs)
 
 			if len(retrySwapTxs) > 0 {
-				util.Logger.Infof("Track %d non-finalized retry swap txs", len(retrySwapTxs))
+				util.Logger.Debugf("Track %d non-finalized retry swap txs", len(retrySwapTxs))
 			}
 
 			for _, retrySwapTx := range retrySwapTxs {
+				gasPrice := big.NewInt(0)
+				gasPrice.SetString(retrySwapTx.GasPrice, 10)
+
 				var client *ethclient.Client
 				var chainName string
 				if retrySwapTx.Direction == SwapBSC2Eth {
@@ -283,18 +315,24 @@ func (engine *SwapEngine) trackRetrySwapTxDaemon() {
 								"updated_at":          time.Now().Unix(),
 							})
 					} else {
+						txFee := big.NewInt(1).Mul(gasPrice, big.NewInt(int64(txRecipient.GasUsed))).String()
 						if txRecipient.Status == TxFailedStatus {
-							util.Logger.Infof(fmt.Sprintf("fill tx is failed, chain %s, txHash: %s", chainName, txRecipient.TxHash))
-							util.SendTelegramMessage(fmt.Sprintf("fill tx is failed, chain %s, txHash: %s", chainName, txRecipient.TxHash))
+							util.Logger.Infof(fmt.Sprintf("fill retry swap tx is failed, chain %s, txHash: %s", chainName, txRecipient.TxHash.String()))
+							util.SendTelegramMessage(fmt.Sprintf("fill retry swap tx is failed, chain %s, txHash: %s", chainName, txRecipient.TxHash.String()))
 							tx.Model(model.RetrySwapTx{}).Where("id = ?", retrySwapTx.ID).Updates(
 								map[string]interface{}{
 									"status":              model.FillRetryTxFailed,
+									"height":              txRecipient.BlockNumber.Int64(),
+									"consumed_fee_amount": txFee,
 									"updated_at":          time.Now().Unix(),
 								})
 						} else {
+							util.Logger.Infof(fmt.Sprintf("fill retry swap tx is success, chain %s, txHash: %s", chainName, txRecipient.TxHash.String()))
 							tx.Model(model.RetrySwapTx{}).Where("id = ?", retrySwapTx.ID).Updates(
 								map[string]interface{}{
 									"status":              model.FillRetryTxSuccess,
+									"height":              txRecipient.BlockNumber.Int64(),
+									"consumed_fee_amount": txFee,
 									"updated_at":          time.Now().Unix(),
 								})
 
@@ -304,6 +342,7 @@ func (engine *SwapEngine) trackRetrySwapTxDaemon() {
 								return err
 							}
 							swap.Status = SwapSuccess
+							swap.Log = fmt.Sprintf("retry success, retry txHash %s", retrySwapTx.RetryFillSwapTxHash)
 							engine.updateSwap(tx, swap)
 						}
 					}
@@ -318,23 +357,28 @@ func (engine *SwapEngine) trackRetrySwapTxDaemon() {
 	}()
 }
 
-func (engine *SwapEngine) InsertRetryFailedSwaps(swapIDList []uint) ([]uint, error) {
+func (engine *SwapEngine) InsertRetryFailedSwaps(swapIDList []uint) ([]uint, []uint, error) {
 	swaps := make([]model.Swap, 0)
 	engine.db.Where("id  in (?)", swapIDList).Find(&swaps)
 
 	if len(swaps) == 0 {
-		return nil, fmt.Errorf("no matched swap")
+		return nil, nil, fmt.Errorf("no matched swap")
 	}
 
 	retrySwapList := make([]uint, 0, len(swapIDList))
+	rejectedRetrySwapList := make([]uint, 0, len(swapIDList))
 	writeDBErr := func() error {
 		tx := engine.db.Begin()
 		if err := tx.Error; err != nil {
 			return err
 		}
 		for _, swap := range swaps {
+			if !engine.verifySwap(&swap) {
+				rejectedRetrySwapList = append(rejectedRetrySwapList, swap.ID)
+				continue
+			}
 			if swap.Status != SwapSendFailed {
-				util.Logger.Infof("Skip non-failed swap, swapID %d", swap.ID)
+				rejectedRetrySwapList = append(rejectedRetrySwapList, swap.ID)
 				continue
 			}
 			retrySwapList = append(retrySwapList, swap.ID)
@@ -357,5 +401,57 @@ func (engine *SwapEngine) InsertRetryFailedSwaps(swapIDList []uint) ([]uint, err
 		}
 		return tx.Commit().Error
 	}()
-	return retrySwapList, writeDBErr
+	return retrySwapList, rejectedRetrySwapList, writeDBErr
+}
+
+func (engine *SwapEngine) WithdrawToken(chain string, tokenAddr, recipient ethcom.Address, amount *big.Int) (string, error) {
+	tokenABI, err := abi.JSON(strings.NewReader(sabi.ERC20ABI))
+	if err != nil {
+		return "", err
+	}
+	emptyAddr := ethcom.Address{}
+	txSender := engine.bscTxSender
+	client := engine.bscClient
+	explorerUrl := engine.config.ChainConfig.BSCExplorerUrl
+	if chain == common.ChainETH {
+		txSender = engine.ethTxSender
+		client = engine.ethClient
+		explorerUrl = engine.config.ChainConfig.ETHExplorerUrl
+		ethClientMutex.Lock()
+		defer ethClientMutex.Unlock()
+	} else {
+		bscClientMutex.Lock()
+		defer bscClientMutex.Unlock()
+	}
+	// withdraw native token
+	if bytes.Equal(tokenAddr[:], emptyAddr[:]) {
+		signedTx, err := buildNativeCoinTransferTx(chain, txSender, recipient, amount, client, engine.tssClientSecureConfig, engine.config.KeyManagerConfig.Endpoint)
+		if err != nil {
+			util.Logger.Errorf("build native coin transfer error: %s", err.Error())
+			return "", err
+		}
+		err = client.SendTransaction(context.Background(), signedTx)
+		if err != nil {
+			util.Logger.Errorf("broadcast tx to %s error: %s", chain, err.Error())
+			return "", err
+		}
+		util.Logger.Infof("Send transaction to %s, %s/%s", chain, explorerUrl, signedTx.Hash().String())
+		return signedTx.Hash().String(), nil
+	}
+	// withdraw BEP20 or ERC20 token
+	data, err := abiEncodeERC20Transfer(recipient, amount, &tokenABI)
+	if err != nil {
+		return "", err
+	}
+	signedTx, err := buildSignedTransaction(chain, txSender, tokenAddr, client, data, engine.tssClientSecureConfig, engine.config.KeyManagerConfig.Endpoint)
+	if err != nil {
+		return "", err
+	}
+	err = client.SendTransaction(context.Background(), signedTx)
+	if err != nil {
+		util.Logger.Errorf("broadcast tx to %s error: %s", chain, err.Error())
+		return "", err
+	}
+	util.Logger.Infof("Send transaction to %s, %s/%s", chain, explorerUrl, signedTx.Hash().String())
+	return signedTx.Hash().String(), nil
 }

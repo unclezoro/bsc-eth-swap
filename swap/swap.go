@@ -1,7 +1,6 @@
 package swap
 
 import (
-	"bytes"
 	"context"
 	"crypto/hmac"
 	"crypto/sha256"
@@ -237,7 +236,7 @@ func (engine *SwapEngine) confirmSwapRequestDaemon() {
 			continue
 		}
 
-		util.Logger.Infof("found %d confirmed event logs", len(txEventLogs))
+		util.Logger.Debugf("found %d confirmed event logs", len(txEventLogs))
 
 		for _, txEventLog := range txEventLogs {
 			swap := model.Swap{}
@@ -295,14 +294,33 @@ func (engine *SwapEngine) swapInstanceDaemon(direction common.SwapDirection) {
 		util.Logger.Debugf("found %d confirmed swap requests", len(swaps))
 
 		for _, swap := range swaps {
-			if !engine.verifySwap(&swap) {
-				util.Logger.Errorf("verify hmac of swap failed: %s", swap.StartTxHash)
-				util.SendTelegramMessage(fmt.Sprintf("Urgent alert: verify hmac of swap failed: %s", swap.StartTxHash))
-				continue
-			}
-			swapPairInstance, err := engine.GetSwapPairInstance(ethcom.HexToAddress(swap.ERC20Addr))
-			if err != nil {
-				util.Logger.Debugf("swap instance for bep20 %s doesn't exist, skip this swap", swap.BEP20Addr)
+			var swapPairInstance *SwapPairIns
+			var err error
+			retryCheckErr := func() error {
+				if !engine.verifySwap(&swap) {
+					return fmt.Errorf("verify hmac of swap failed: %s", swap.StartTxHash)
+				}
+				swapPairInstance, err = engine.GetSwapPairInstance(ethcom.HexToAddress(swap.ERC20Addr))
+				if err != nil {
+					return fmt.Errorf("swap instance for bep20 %s doesn't exist, skip this swap", swap.BEP20Addr)
+				}
+				return nil
+			}()
+			if retryCheckErr != nil {
+				writeDBErr := func() error {
+					tx := engine.db.Begin()
+					if err := tx.Error; err != nil {
+						return err
+					}
+					swap.Status = SwapQuoteRejected
+					swap.Log = retryCheckErr.Error()
+					engine.updateSwap(tx, &swap)
+					return tx.Commit().Error
+				}()
+				if writeDBErr != nil {
+					util.Logger.Errorf("write db error: %s", writeDBErr.Error())
+					util.SendTelegramMessage(fmt.Sprintf("write db error: %s", writeDBErr.Error()))
+				}
 				continue
 			}
 
@@ -321,13 +339,12 @@ func (engine *SwapEngine) swapInstanceDaemon(direction common.SwapDirection) {
 						swap.Status = SwapConfirmed
 						engine.updateSwap(tx, &swap)
 					} else {
-						tx.Model(model.SwapFillTx{}).Where("id = ?", swapTx.ID).Updates(
+						util.Logger.Infof("swap tx is built successfully, but the swap tx status is uncertain, just mark the swap and swap tx status as sent, swap ID %d", swap.ID)
+						tx.Model(model.SwapFillTx{}).Where("fill_swap_tx_hash = ?", swapTx.FillSwapTxHash).Updates(
 							map[string]interface{}{
 								"status":     model.FillTxSent,
 								"updated_at": time.Now().Unix(),
 							})
-
-						// update swap
 						swap.Status = SwapSent
 						swap.FillTxHash = swapTx.FillSwapTxHash
 						engine.updateSwap(tx, &swap)
@@ -350,7 +367,7 @@ func (engine *SwapEngine) swapInstanceDaemon(direction common.SwapDirection) {
 				continue
 			}
 
-			util.Logger.Infof("do swap token %s , direction %s, sponsor: %s, amount %s, decimals %d,", swap.BEP20Addr, direction, swap.Sponsor, swap.Amount, swap.Decimals)
+			util.Logger.Infof("Swap token %s, direction %s, sponsor: %s, amount %s, decimals %d", swap.BEP20Addr, direction, swap.Sponsor, swap.Amount, swap.Decimals)
 			swapTx, swapErr := engine.doSwap(&swap, swapPairInstance)
 
 			writeDBErr = func() error {
@@ -360,6 +377,7 @@ func (engine *SwapEngine) swapInstanceDaemon(direction common.SwapDirection) {
 				}
 				if swapErr != nil {
 					util.Logger.Errorf("do swap failed: %s, start hash %s", swapErr.Error(), swap.StartTxHash)
+					util.SendTelegramMessage(fmt.Sprintf("do swap failed: %s, start hash %s", swapErr.Error(), swap.StartTxHash))
 					if swapErr.Error() == core.ErrReplaceUnderpriced.Error() {
 						// retry this swap
 						swap.Status = SwapConfirmed
@@ -367,9 +385,13 @@ func (engine *SwapEngine) swapInstanceDaemon(direction common.SwapDirection) {
 
 						engine.updateSwap(tx, &swap)
 					} else {
-						util.SendTelegramMessage(fmt.Sprintf("do swap failed: %s, start hash %s", swapErr.Error(), swap.StartTxHash))
 						fillTxHash := ""
 						if swapTx != nil {
+							tx.Model(model.SwapFillTx{}).Where("fill_swap_tx_hash = ?", swapTx.FillSwapTxHash).Updates(
+								map[string]interface{}{
+									"status":     model.FillTxFailed,
+									"updated_at": time.Now().Unix(),
+								})
 							fillTxHash = swapTx.FillSwapTxHash
 						}
 
@@ -379,7 +401,7 @@ func (engine *SwapEngine) swapInstanceDaemon(direction common.SwapDirection) {
 						engine.updateSwap(tx, &swap)
 					}
 				} else {
-					tx.Model(model.SwapFillTx{}).Where("id = ?", swapTx.ID).Updates(
+					tx.Model(model.SwapFillTx{}).Where("fill_swap_tx_hash = ?", swapTx.FillSwapTxHash).Updates(
 						map[string]interface{}{
 							"status":     model.FillTxSent,
 							"updated_at": time.Now().Unix(),
@@ -541,7 +563,7 @@ func (engine *SwapEngine) trackSwapTxDaemon() {
 			swapTxs := append(ethSwapTxs, bscSwapTxs...)
 
 			if len(swapTxs) > 0 {
-				util.Logger.Infof("Track %d non-finalized swap txs", len(swapTxs))
+				util.Logger.Debugf("Track %d non-finalized swap txs", len(swapTxs))
 			}
 
 			for _, swapTx := range swapTxs {
@@ -589,8 +611,8 @@ func (engine *SwapEngine) trackSwapTxDaemon() {
 					} else {
 						txFee := big.NewInt(1).Mul(gasPrice, big.NewInt(int64(txRecipient.GasUsed))).String()
 						if txRecipient.Status == TxFailedStatus {
-							util.Logger.Infof(fmt.Sprintf("fill tx is failed, chain %s, txHash: %s", chainName, txRecipient.TxHash))
-							util.SendTelegramMessage(fmt.Sprintf("fill tx is failed, chain %s, txHash: %s", chainName, txRecipient.TxHash))
+							util.Logger.Infof(fmt.Sprintf("fill swap tx is failed, chain %s, txHash: %s", chainName, txRecipient.TxHash.String()))
+							util.SendTelegramMessage(fmt.Sprintf("fill swap tx is failed, chain %s, txHash: %s", chainName, txRecipient.TxHash.String()))
 							tx.Model(model.SwapFillTx{}).Where("id = ?", swapTx.ID).Updates(
 								map[string]interface{}{
 									"status":              model.FillTxFailed,
@@ -608,6 +630,7 @@ func (engine *SwapEngine) trackSwapTxDaemon() {
 							swap.Log = "fill tx is failed"
 							engine.updateSwap(tx, swap)
 						} else {
+							util.Logger.Infof(fmt.Sprintf("fill swap tx is success, chain %s, txHash: %s", chainName, txRecipient.TxHash.String()))
 							tx.Model(model.SwapFillTx{}).Where("id = ?", swapTx.ID).Updates(
 								map[string]interface{}{
 									"status":              model.FillTxSuccess,
@@ -683,7 +706,7 @@ func (engine *SwapEngine) AddSwapPairInstance(swapPair *model.SwapPair) error {
 	engine.bep20ToERC20[ethcom.HexToAddress(swapPair.BEP20Addr)] = ethcom.HexToAddress(swapPair.ERC20Addr)
 	engine.erc20ToBEP20[ethcom.HexToAddress(swapPair.ERC20Addr)] = ethcom.HexToAddress(swapPair.BEP20Addr)
 
-	util.Logger.Infof("Load swap pair, bep20 address %s, erc20 address %s", swapPair.BEP20Addr, swapPair.ERC20Addr)
+	util.Logger.Infof("Create new swap pair, symbol %s, bep20 address %s, erc20 address %s", swapPair.Symbol, swapPair.BEP20Addr, swapPair.ERC20Addr)
 
 	return nil
 }
@@ -723,56 +746,4 @@ func (engine *SwapEngine) UpdateSwapInstance(swapPair *model.SwapPair) {
 	tokenInstance.LowBound = lowBound
 
 	engine.swapPairsFromERC20Addr[bscTokenAddr] = tokenInstance
-}
-
-func (engine *SwapEngine) WithdrawToken(chain string, tokenAddr, recipient ethcom.Address, amount *big.Int) (string, error) {
-	tokenABI, err := abi.JSON(strings.NewReader(sabi.ERC20ABI))
-	if err != nil {
-		return "", err
-	}
-	emptyAddr := ethcom.Address{}
-	txSender := engine.bscTxSender
-	client := engine.bscClient
-	explorerUrl := engine.config.ChainConfig.BSCExplorerUrl
-	if chain == common.ChainETH {
-		txSender = engine.ethTxSender
-		client = engine.ethClient
-		explorerUrl = engine.config.ChainConfig.ETHExplorerUrl
-		ethClientMutex.Lock()
-		defer ethClientMutex.Unlock()
-	} else {
-		bscClientMutex.Lock()
-		defer bscClientMutex.Unlock()
-	}
-	// withdraw native token
-	if bytes.Equal(tokenAddr[:], emptyAddr[:]) {
-		signedTx, err := buildNativeCoinTransferTx(chain, txSender, recipient, amount, client, engine.tssClientSecureConfig, engine.config.KeyManagerConfig.Endpoint)
-		if err != nil {
-			util.Logger.Errorf("build native coin transfer error: %s", err.Error())
-			return "", err
-		}
-		err = client.SendTransaction(context.Background(), signedTx)
-		if err != nil {
-			util.Logger.Errorf("broadcast tx to %s error: %s", chain, err.Error())
-			return "", err
-		}
-		util.Logger.Infof("Send transaction to %s, %s/%s", chain, explorerUrl, signedTx.Hash().String())
-		return signedTx.Hash().String(), nil
-	}
-	// withdraw BEP20 or ERC20 token
-	data, err := abiEncodeERC20Transfer(recipient, amount, &tokenABI)
-	if err != nil {
-		return "", err
-	}
-	signedTx, err := buildSignedTransaction(chain, txSender, tokenAddr, client, data, engine.tssClientSecureConfig, engine.config.KeyManagerConfig.Endpoint)
-	if err != nil {
-		return "", err
-	}
-	err = client.SendTransaction(context.Background(), signedTx)
-	if err != nil {
-		util.Logger.Errorf("broadcast tx to %s error: %s", chain, err.Error())
-		return "", err
-	}
-	util.Logger.Infof("Send transaction to %s, %s/%s", chain, explorerUrl, signedTx.Hash().String())
-	return signedTx.Hash().String(), nil
 }
