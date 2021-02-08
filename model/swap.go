@@ -59,20 +59,20 @@ func (SwapFillTx) TableName() string {
 type RetrySwap struct {
 	gorm.Model
 
-	SwapID      uint                 `gorm:"not null"`
-	Direction   common.SwapDirection `gorm:"not null"`
-	StartTxHash string               `gorm:"not null;index:retry_swap_start_tx_hash"`
-	FillTxHash  string               `gorm:"not null"`
-	Sponsor     string               `gorm:"not null;index:retry_swap_sponsor"`
-	BEP20Addr   string               `gorm:"not null;index:retry_swap_bep20_addr"`
-	ERC20Addr   string               `gorm:"not null;index:retry_swap_erc20_addr"`
-	Symbol      string               `gorm:"not null"`
-	Amount      string               `gorm:"not null"`
-	Decimals    int                  `gorm:"not null"`
+	Status      common.RetrySwapStatus `gorm:"not null"`
+	SwapID      uint                   `gorm:"not null"`
+	Direction   common.SwapDirection   `gorm:"not null"`
+	StartTxHash string                 `gorm:"not null;index:retry_swap_start_tx_hash"`
+	FillTxHash  string                 `gorm:"not null"`
+	Sponsor     string                 `gorm:"not null;index:retry_swap_sponsor"`
+	BEP20Addr   string                 `gorm:"not null;index:retry_swap_bep20_addr"`
+	ERC20Addr   string                 `gorm:"not null;index:retry_swap_erc20_addr"`
+	Symbol      string                 `gorm:"not null"`
+	Amount      string                 `gorm:"not null"`
+	Decimals    int                    `gorm:"not null"`
 
 	RecordHash string `gorm:"not null"`
 	ErrorMsg   string
-	Done       bool
 }
 
 func (RetrySwap) TableName() string {
@@ -82,7 +82,7 @@ func (RetrySwap) TableName() string {
 type RetrySwapTx struct {
 	gorm.Model
 
-	SwapID              uint                 `gorm:"not null;index:retry_swap_tx_swap_id"`
+	RetrySwapID         uint                 `gorm:"not null;index:retry_swap_tx_retry_swap_id"`
 	StartTxHash         string               `gorm:"not null;index:retry_swap_tx_start_tx_hash"`
 	Direction           common.SwapDirection `gorm:"not null"`
 	TrackRetryCounter   int64

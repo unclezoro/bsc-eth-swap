@@ -239,28 +239,21 @@ func (engine *SwapEngine) confirmSwapRequestDaemon() {
 		util.Logger.Debugf("found %d confirmed event logs", len(txEventLogs))
 
 		for _, txEventLog := range txEventLogs {
-			swap := model.Swap{}
-			engine.db.Where("start_tx_hash = ?", txEventLog.TxHash).First(&swap)
-			if swap.StartTxHash == "" {
-				util.Logger.Errorf("unexpected error, can't find swap by start hash: %s", txEventLog.TxHash)
-				util.SendTelegramMessage(fmt.Sprintf("unexpected error, can't find swap by start hash: %s", txEventLog.TxHash))
-				continue
-			}
-
-			if !engine.verifySwap(&swap) {
-				util.Logger.Errorf("verify hmac of swap failed: %s", swap.StartTxHash)
-				util.SendTelegramMessage(fmt.Sprintf("Urgent alert: verify hmac of swap failed: %s", swap.StartTxHash))
-				continue
-			}
-
 			writeDBErr := func() error {
 				tx := engine.db.Begin()
 				if err := tx.Error; err != nil {
 					return err
 				}
+				swap, err := engine.getSwapByStartTxHash(tx, txEventLog.TxHash)
+				if err != nil {
+					util.Logger.Errorf("verify hmac of swap failed: %s", txEventLog.TxHash)
+					util.SendTelegramMessage(fmt.Sprintf("Urgent alert: verify hmac of swap failed: %s", txEventLog.TxHash))
+					return err
+				}
+
 				if swap.Status == SwapTokenReceived {
 					swap.Status = SwapConfirmed
-					engine.updateSwap(tx, &swap)
+					engine.updateSwap(tx, swap)
 				}
 
 				tx.Model(model.SwapStartTxLog{}).Where("id = ?", txEventLog.Id).Updates(
@@ -334,7 +327,7 @@ func (engine *SwapEngine) swapInstanceDaemon(direction common.SwapDirection) {
 					var swapTx model.SwapFillTx
 					engine.db.Where("start_swap_tx_hash = ?", swap.StartTxHash).First(&swapTx)
 					if swapTx.FillSwapTxHash == "" {
-						util.Logger.Infof("retry swap, start tx hash %s, symbol %s, amount %s, direction",
+						util.Logger.Infof("retry swap, start tx hash %s, symbol %s, amount %s, direction %s",
 							swap.StartTxHash, swap.Symbol, swap.Amount, swap.Direction)
 						swap.Status = SwapConfirmed
 						engine.updateSwap(tx, &swap)
@@ -663,7 +656,13 @@ func (engine *SwapEngine) trackSwapTxDaemon() {
 func (engine *SwapEngine) getSwapByStartTxHash(tx *gorm.DB, txHash string) (*model.Swap, error) {
 	swap := model.Swap{}
 	err := tx.Where("start_tx_hash = ?", txHash).First(&swap).Error
-	return &swap, err
+	if err != nil {
+		return nil, err
+	}
+	if !engine.verifySwap(&swap) {
+		return nil, fmt.Errorf("hmac verification failure")
+	}
+	return &swap, nil
 }
 
 func (engine *SwapEngine) insertSwapTxToDB(data *model.SwapFillTx) error {

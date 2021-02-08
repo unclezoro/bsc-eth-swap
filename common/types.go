@@ -21,6 +21,7 @@ const (
 
 type SwapStatus string
 type SwapPairStatus string
+type RetrySwapStatus string
 type SwapDirection string
 
 type BlockAndEventLogs struct {

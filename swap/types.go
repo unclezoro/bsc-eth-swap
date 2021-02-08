@@ -24,13 +24,18 @@ const (
 	SwapSuccess       common.SwapStatus = "sent_success"
 
 	SwapPairReceived   common.SwapPairStatus = "received"
-	SwapPairRejected   common.SwapPairStatus = "rejected"
 	SwapPairConfirmed  common.SwapPairStatus = "confirmed"
 	SwapPairSending    common.SwapPairStatus = "sending"
 	SwapPairSent       common.SwapPairStatus = "sent"
 	SwapPairSendFailed common.SwapPairStatus = "sent_fail"
 	SwapPairSuccess    common.SwapPairStatus = "sent_success"
 	SwapPairFinalized  common.SwapPairStatus = "finalized"
+
+	RetrySwapConfirmed  common.RetrySwapStatus = "confirmed"
+	RetrySwapSending    common.RetrySwapStatus = "sending"
+	RetrySwapSent       common.RetrySwapStatus = "sent"
+	RetrySwapSendFailed common.RetrySwapStatus = "sent_fail"
+	RetrySwapSuccess    common.RetrySwapStatus = "sent_success"
 
 	SwapEth2BSC common.SwapDirection = "eth_bsc"
 	SwapBSC2Eth common.SwapDirection = "bsc_eth"
