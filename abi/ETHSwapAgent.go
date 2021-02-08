@@ -28,7 +28,7 @@ var (
 )
 
 // ETHSwapAgentABI is the input ABI used to generate the binding from.
-const ETHSwapAgentABI = "[{\"inputs\":[],\"stateMutability\":\"nonpayable\",\"type\":\"constructor\"},{\"anonymous\":false,\"inputs\":[{\"indexed\":true,\"internalType\":\"address\",\"name\":\"previousOwner\",\"type\":\"address\"},{\"indexed\":true,\"internalType\":\"address\",\"name\":\"newOwner\",\"type\":\"address\"}],\"name\":\"OwnershipTransferred\",\"type\":\"event\"},{\"anonymous\":false,\"inputs\":[{\"indexed\":true,\"internalType\":\"address\",\"name\":\"erc20Addr\",\"type\":\"address\"},{\"indexed\":true,\"internalType\":\"bytes32\",\"name\":\"bscTxHash\",\"type\":\"bytes32\"},{\"indexed\":true,\"internalType\":\"address\",\"name\":\"toAddress\",\"type\":\"address\"},{\"indexed\":false,\"internalType\":\"uint256\",\"name\":\"amount\",\"type\":\"uint256\"}],\"name\":\"SwapFilled\",\"type\":\"event\"},{\"anonymous\":false,\"inputs\":[{\"indexed\":true,\"internalType\":\"address\",\"name\":\"sponsor\",\"type\":\"address\"},{\"indexed\":true,\"internalType\":\"address\",\"name\":\"erc20Addr\",\"type\":\"address\"},{\"indexed\":false,\"internalType\":\"string\",\"name\":\"name\",\"type\":\"string\"},{\"indexed\":false,\"internalType\":\"string\",\"name\":\"symbol\",\"type\":\"string\"},{\"indexed\":false,\"internalType\":\"uint8\",\"name\":\"decimals\",\"type\":\"uint8\"}],\"name\":\"SwapPairRegister\",\"type\":\"event\"},{\"anonymous\":false,\"inputs\":[{\"indexed\":true,\"internalType\":\"address\",\"name\":\"erc20Addr\",\"type\":\"address\"},{\"indexed\":true,\"internalType\":\"address\",\"name\":\"fromAddr\",\"type\":\"address\"},{\"indexed\":false,\"internalType\":\"uint256\",\"name\":\"amount\",\"type\":\"uint256\"},{\"indexed\":false,\"internalType\":\"uint256\",\"name\":\"feeAmount\",\"type\":\"uint256\"}],\"name\":\"SwapStarted\",\"type\":\"event\"},{\"inputs\":[{\"internalType\":\"bytes32\",\"name\":\"bscTxHash\",\"type\":\"bytes32\"},{\"internalType\":\"address\",\"name\":\"erc20Addr\",\"type\":\"address\"},{\"internalType\":\"address\",\"name\":\"toAddress\",\"type\":\"address\"},{\"internalType\":\"uint256\",\"name\":\"amount\",\"type\":\"uint256\"}],\"name\":\"fillBSC2ETHSwap\",\"outputs\":[{\"internalType\":\"bool\",\"name\":\"\",\"type\":\"bool\"}],\"stateMutability\":\"nonpayable\",\"type\":\"function\"},{\"inputs\":[{\"internalType\":\"uint256\",\"name\":\"fee\",\"type\":\"uint256\"},{\"internalType\":\"addresspayable\",\"name\":\"ownerAddr\",\"type\":\"address\"}],\"name\":\"initialize\",\"outputs\":[],\"stateMutability\":\"nonpayable\",\"type\":\"function\"},{\"inputs\":[],\"name\":\"owner\",\"outputs\":[{\"internalType\":\"addresspayable\",\"name\":\"\",\"type\":\"address\"}],\"stateMutability\":\"view\",\"type\":\"function\"},{\"inputs\":[{\"internalType\":\"address\",\"name\":\"erc20Addr\",\"type\":\"address\"}],\"name\":\"registerSwapToBSC\",\"outputs\":[{\"internalType\":\"bool\",\"name\":\"\",\"type\":\"bool\"}],\"stateMutability\":\"nonpayable\",\"type\":\"function\"},{\"inputs\":[{\"internalType\":\"address\",\"name\":\"\",\"type\":\"address\"}],\"name\":\"registeredERC20\",\"outputs\":[{\"internalType\":\"bool\",\"name\":\"\",\"type\":\"bool\"}],\"stateMutability\":\"view\",\"type\":\"function\"},{\"inputs\":[],\"name\":\"renounceOwnership\",\"outputs\":[],\"stateMutability\":\"nonpayable\",\"type\":\"function\"},{\"inputs\":[{\"internalType\":\"uint256\",\"name\":\"fee\",\"type\":\"uint256\"}],\"name\":\"setSwapFee\",\"outputs\":[],\"stateMutability\":\"nonpayable\",\"type\":\"function\"},{\"inputs\":[{\"internalType\":\"address\",\"name\":\"erc20Addr\",\"type\":\"address\"},{\"internalType\":\"uint256\",\"name\":\"amount\",\"type\":\"uint256\"}],\"name\":\"swapETH2BSC\",\"outputs\":[{\"internalType\":\"bool\",\"name\":\"\",\"type\":\"bool\"}],\"stateMutability\":\"payable\",\"type\":\"function\"},{\"inputs\":[],\"name\":\"swapFee\",\"outputs\":[{\"internalType\":\"uint256\",\"name\":\"\",\"type\":\"uint256\"}],\"stateMutability\":\"view\",\"type\":\"function\"},{\"inputs\":[{\"internalType\":\"addresspayable\",\"name\":\"newOwner\",\"type\":\"address\"}],\"name\":\"transferOwnership\",\"outputs\":[],\"stateMutability\":\"nonpayable\",\"type\":\"function\"}]"
+const ETHSwapAgentABI = "[{\"inputs\":[],\"stateMutability\":\"nonpayable\",\"type\":\"constructor\"},{\"anonymous\":false,\"inputs\":[{\"indexed\":true,\"internalType\":\"address\",\"name\":\"previousOwner\",\"type\":\"address\"},{\"indexed\":true,\"internalType\":\"address\",\"name\":\"newOwner\",\"type\":\"address\"}],\"name\":\"OwnershipTransferred\",\"type\":\"event\"},{\"anonymous\":false,\"inputs\":[{\"indexed\":true,\"internalType\":\"address\",\"name\":\"erc20Addr\",\"type\":\"address\"},{\"indexed\":true,\"internalType\":\"bytes32\",\"name\":\"bscTxHash\",\"type\":\"bytes32\"},{\"indexed\":true,\"internalType\":\"address\",\"name\":\"toAddress\",\"type\":\"address\"},{\"indexed\":false,\"internalType\":\"uint256\",\"name\":\"amount\",\"type\":\"uint256\"}],\"name\":\"SwapFilled\",\"type\":\"event\"},{\"anonymous\":false,\"inputs\":[{\"indexed\":true,\"internalType\":\"address\",\"name\":\"sponsor\",\"type\":\"address\"},{\"indexed\":true,\"internalType\":\"address\",\"name\":\"erc20Addr\",\"type\":\"address\"},{\"indexed\":false,\"internalType\":\"string\",\"name\":\"name\",\"type\":\"string\"},{\"indexed\":false,\"internalType\":\"string\",\"name\":\"symbol\",\"type\":\"string\"},{\"indexed\":false,\"internalType\":\"uint8\",\"name\":\"decimals\",\"type\":\"uint8\"}],\"name\":\"SwapPairRegister\",\"type\":\"event\"},{\"anonymous\":false,\"inputs\":[{\"indexed\":true,\"internalType\":\"address\",\"name\":\"erc20Addr\",\"type\":\"address\"},{\"indexed\":true,\"internalType\":\"address\",\"name\":\"fromAddr\",\"type\":\"address\"},{\"indexed\":false,\"internalType\":\"uint256\",\"name\":\"amount\",\"type\":\"uint256\"},{\"indexed\":false,\"internalType\":\"uint256\",\"name\":\"feeAmount\",\"type\":\"uint256\"}],\"name\":\"SwapStarted\",\"type\":\"event\"},{\"inputs\":[{\"internalType\":\"bytes32\",\"name\":\"\",\"type\":\"bytes32\"}],\"name\":\"filledBSCTx\",\"outputs\":[{\"internalType\":\"bool\",\"name\":\"\",\"type\":\"bool\"}],\"stateMutability\":\"view\",\"type\":\"function\"},{\"inputs\":[],\"name\":\"owner\",\"outputs\":[{\"internalType\":\"addresspayable\",\"name\":\"\",\"type\":\"address\"}],\"stateMutability\":\"view\",\"type\":\"function\"},{\"inputs\":[{\"internalType\":\"address\",\"name\":\"\",\"type\":\"address\"}],\"name\":\"registeredERC20\",\"outputs\":[{\"internalType\":\"bool\",\"name\":\"\",\"type\":\"bool\"}],\"stateMutability\":\"view\",\"type\":\"function\"},{\"inputs\":[],\"name\":\"swapFee\",\"outputs\":[{\"internalType\":\"uint256\",\"name\":\"\",\"type\":\"uint256\"}],\"stateMutability\":\"view\",\"type\":\"function\"},{\"inputs\":[{\"internalType\":\"uint256\",\"name\":\"fee\",\"type\":\"uint256\"},{\"internalType\":\"addresspayable\",\"name\":\"ownerAddr\",\"type\":\"address\"}],\"name\":\"initialize\",\"outputs\":[],\"stateMutability\":\"nonpayable\",\"type\":\"function\"},{\"inputs\":[],\"name\":\"renounceOwnership\",\"outputs\":[],\"stateMutability\":\"nonpayable\",\"type\":\"function\"},{\"inputs\":[{\"internalType\":\"addresspayable\",\"name\":\"newOwner\",\"type\":\"address\"}],\"name\":\"transferOwnership\",\"outputs\":[],\"stateMutability\":\"nonpayable\",\"type\":\"function\"},{\"inputs\":[{\"internalType\":\"uint256\",\"name\":\"fee\",\"type\":\"uint256\"}],\"name\":\"setSwapFee\",\"outputs\":[],\"stateMutability\":\"nonpayable\",\"type\":\"function\"},{\"inputs\":[{\"internalType\":\"address\",\"name\":\"erc20Addr\",\"type\":\"address\"}],\"name\":\"registerSwapPairToBSC\",\"outputs\":[{\"internalType\":\"bool\",\"name\":\"\",\"type\":\"bool\"}],\"stateMutability\":\"nonpayable\",\"type\":\"function\"},{\"inputs\":[{\"internalType\":\"bytes32\",\"name\":\"bscTxHash\",\"type\":\"bytes32\"},{\"internalType\":\"address\",\"name\":\"erc20Addr\",\"type\":\"address\"},{\"internalType\":\"address\",\"name\":\"toAddress\",\"type\":\"address\"},{\"internalType\":\"uint256\",\"name\":\"amount\",\"type\":\"uint256\"}],\"name\":\"fillBSC2ETHSwap\",\"outputs\":[{\"internalType\":\"bool\",\"name\":\"\",\"type\":\"bool\"}],\"stateMutability\":\"nonpayable\",\"type\":\"function\"},{\"inputs\":[{\"internalType\":\"address\",\"name\":\"erc20Addr\",\"type\":\"address\"},{\"internalType\":\"uint256\",\"name\":\"amount\",\"type\":\"uint256\"}],\"name\":\"swapETH2BSC\",\"outputs\":[{\"internalType\":\"bool\",\"name\":\"\",\"type\":\"bool\"}],\"stateMutability\":\"payable\",\"type\":\"function\"}]"
 
 // ETHSwapAgent is an auto generated Go binding around an Ethereum contract.
 type ETHSwapAgent struct {
@@ -172,6 +172,32 @@ func (_ETHSwapAgent *ETHSwapAgentTransactorRaw) Transact(opts *bind.TransactOpts
 	return _ETHSwapAgent.Contract.contract.Transact(opts, method, params...)
 }
 
+// FilledBSCTx is a free data retrieval call binding the contract method 0x50877c77.
+//
+// Solidity: function filledBSCTx(bytes32 ) constant returns(bool)
+func (_ETHSwapAgent *ETHSwapAgentCaller) FilledBSCTx(opts *bind.CallOpts, arg0 [32]byte) (bool, error) {
+	var (
+		ret0 = new(bool)
+	)
+	out := ret0
+	err := _ETHSwapAgent.contract.Call(opts, out, "filledBSCTx", arg0)
+	return *ret0, err
+}
+
+// FilledBSCTx is a free data retrieval call binding the contract method 0x50877c77.
+//
+// Solidity: function filledBSCTx(bytes32 ) constant returns(bool)
+func (_ETHSwapAgent *ETHSwapAgentSession) FilledBSCTx(arg0 [32]byte) (bool, error) {
+	return _ETHSwapAgent.Contract.FilledBSCTx(&_ETHSwapAgent.CallOpts, arg0)
+}
+
+// FilledBSCTx is a free data retrieval call binding the contract method 0x50877c77.
+//
+// Solidity: function filledBSCTx(bytes32 ) constant returns(bool)
+func (_ETHSwapAgent *ETHSwapAgentCallerSession) FilledBSCTx(arg0 [32]byte) (bool, error) {
+	return _ETHSwapAgent.Contract.FilledBSCTx(&_ETHSwapAgent.CallOpts, arg0)
+}
+
 // Owner is a free data retrieval call binding the contract method 0x8da5cb5b.
 //
 // Solidity: function owner() constant returns(address)
@@ -292,25 +318,25 @@ func (_ETHSwapAgent *ETHSwapAgentTransactorSession) Initialize(fee *big.Int, own
 	return _ETHSwapAgent.Contract.Initialize(&_ETHSwapAgent.TransactOpts, fee, ownerAddr)
 }
 
-// RegisterSwapToBSC is a paid mutator transaction binding the contract method 0xd17b7e4d.
+// RegisterSwapPairToBSC is a paid mutator transaction binding the contract method 0x5c13c151.
 //
-// Solidity: function registerSwapToBSC(address erc20Addr) returns(bool)
-func (_ETHSwapAgent *ETHSwapAgentTransactor) RegisterSwapToBSC(opts *bind.TransactOpts, erc20Addr common.Address) (*types.Transaction, error) {
-	return _ETHSwapAgent.contract.Transact(opts, "registerSwapToBSC", erc20Addr)
+// Solidity: function registerSwapPairToBSC(address erc20Addr) returns(bool)
+func (_ETHSwapAgent *ETHSwapAgentTransactor) RegisterSwapPairToBSC(opts *bind.TransactOpts, erc20Addr common.Address) (*types.Transaction, error) {
+	return _ETHSwapAgent.contract.Transact(opts, "registerSwapPairToBSC", erc20Addr)
 }
 
-// RegisterSwapToBSC is a paid mutator transaction binding the contract method 0xd17b7e4d.
+// RegisterSwapPairToBSC is a paid mutator transaction binding the contract method 0x5c13c151.
 //
-// Solidity: function registerSwapToBSC(address erc20Addr) returns(bool)
-func (_ETHSwapAgent *ETHSwapAgentSession) RegisterSwapToBSC(erc20Addr common.Address) (*types.Transaction, error) {
-	return _ETHSwapAgent.Contract.RegisterSwapToBSC(&_ETHSwapAgent.TransactOpts, erc20Addr)
+// Solidity: function registerSwapPairToBSC(address erc20Addr) returns(bool)
+func (_ETHSwapAgent *ETHSwapAgentSession) RegisterSwapPairToBSC(erc20Addr common.Address) (*types.Transaction, error) {
+	return _ETHSwapAgent.Contract.RegisterSwapPairToBSC(&_ETHSwapAgent.TransactOpts, erc20Addr)
 }
 
-// RegisterSwapToBSC is a paid mutator transaction binding the contract method 0xd17b7e4d.
+// RegisterSwapPairToBSC is a paid mutator transaction binding the contract method 0x5c13c151.
 //
-// Solidity: function registerSwapToBSC(address erc20Addr) returns(bool)
-func (_ETHSwapAgent *ETHSwapAgentTransactorSession) RegisterSwapToBSC(erc20Addr common.Address) (*types.Transaction, error) {
-	return _ETHSwapAgent.Contract.RegisterSwapToBSC(&_ETHSwapAgent.TransactOpts, erc20Addr)
+// Solidity: function registerSwapPairToBSC(address erc20Addr) returns(bool)
+func (_ETHSwapAgent *ETHSwapAgentTransactorSession) RegisterSwapPairToBSC(erc20Addr common.Address) (*types.Transaction, error) {
+	return _ETHSwapAgent.Contract.RegisterSwapPairToBSC(&_ETHSwapAgent.TransactOpts, erc20Addr)
 }
 
 // RenounceOwnership is a paid mutator transaction binding the contract method 0x715018a6.
