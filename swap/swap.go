@@ -372,6 +372,8 @@ func (engine *SwapEngine) swapInstanceDaemon(direction common.SwapDirection) {
 					util.Logger.Errorf("do swap failed: %s, start hash %s", swapErr.Error(), swap.StartTxHash)
 					util.SendTelegramMessage(fmt.Sprintf("do swap failed: %s, start hash %s", swapErr.Error(), swap.StartTxHash))
 					if swapErr.Error() == core.ErrReplaceUnderpriced.Error() {
+						//delete the fill swap tx
+						tx.Where("fill_swap_tx_hash = ?", swapTx.FillSwapTxHash).Delete(model.SwapFillTx{})
 						// retry this swap
 						swap.Status = SwapConfirmed
 						swap.Log = fmt.Sprintf("do swap failure: %s", swapErr.Error())

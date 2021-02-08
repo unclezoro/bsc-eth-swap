@@ -240,16 +240,16 @@ func (engine *SwapPairEngine) swapPairInstanceDaemon() {
 				}
 				if swapPairSM.Status == SwapPairSending {
 					var swapPairTx model.SwapPairCreatTx
-					engine.db.Where("swap_pair_register_tx_hash = ?", swapPairSM.PairRegisterTxHash).First(&swapPairTx)
+					engine.db.Where("pair_register_tx_hash = ?", swapPairSM.PairRegisterTxHash).First(&swapPairTx)
 					if swapPairTx.SwapPairRegisterTxHash == "" {
-						util.Logger.Infof("retry swapPairSM, start tx hash %s", swapPairSM.PairRegisterTxHash)
-						tx.Model(model.Swap{}).Where("id = ?", swapPairSM.ID).Updates(
+						util.Logger.Infof("retry swapPairSM, pair register tx hash %s", swapPairSM.PairRegisterTxHash)
+						tx.Model(model.SwapPairStateMachine{}).Where("id = ?", swapPairSM.ID).Updates(
 							map[string]interface{}{
-								"log":        "retry swapPairSM",
+								"log":        "retry to create pair",
 								"updated_at": time.Now().Unix(),
 							})
 					} else {
-						tx.Model(model.SwapFillTx{}).Where("id = ?", swapPairTx.ID).Updates(
+						tx.Model(model.SwapPairCreatTx{}).Where("id = ?", swapPairTx.ID).Updates(
 							map[string]interface{}{
 								"status":     model.FillTxSent,
 								"updated_at": time.Now().Unix(),
@@ -288,6 +288,8 @@ func (engine *SwapPairEngine) swapPairInstanceDaemon() {
 				if swapErr != nil {
 					util.Logger.Errorf("do swapPairSM failed: %s, start hash %s", swapErr.Error(), swapPairSM.PairRegisterTxHash)
 					if swapErr.Error() == core.ErrReplaceUnderpriced.Error() {
+						// delete this create swap tx
+						tx.Where("swap_pair_creat_tx_hash = ?", swapPairCreateTx.SwapPairCreatTxHash).Delete(model.SwapPairCreatTx{})
 						// retry this swapPairSM
 						swapPairSM.Status = SwapPairConfirmed
 						swapPairSM.Log = fmt.Sprintf("do swapPairSM failure: %s", swapErr.Error())
